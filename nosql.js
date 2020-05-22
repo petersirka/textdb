@@ -45,10 +45,7 @@ const REGTUNESCAPE = /%7C|%0D|%0A/g;
 const REGTESCAPETEST = /\||\n|\r/;
 const BOOLEAN = { '1': 1, 'true': 1, 'on': 1 };
 const TABLERECORD = { '+': 1, '-': 1, '*': 1 };
-
-const COMPARER = global.Intl ? global.Intl.Collator().compare : function(a, b) {
-	return a.removeDiacritics().localeCompare(b.removeDiacritics());
-};
+const MAXREADERS = 3;
 
 const CACHE = {};
 const JSONBUFFER = 40;
@@ -75,7 +72,7 @@ function Table(name) {
 	t.ready = false;
 	t.$free = true;
 	t.$writting = false;
-	t.$reading = false;
+	t.$reading = 0;
 	t.$allocations = true;
 
 	t.next2 = function() {
@@ -113,7 +110,7 @@ function Database(name) {
 	self.$timeoutmeta;
 	self.$free = true;
 	self.$writting = false;
-	self.$reading = false;
+	self.$reading = 0;
 
 	self.next2 = function() {
 		self.next(0);
@@ -397,19 +394,22 @@ DP.next = function(type) {
 
 	}
 
-	if (!this.$reading) {
+	if (this.$reading < MAXREADERS) {
 
-		if (this.step !== 4 && this.pending_reader.length) {
+		// if (this.step !== 4 && this.pending_reader.length) {
+		if (this.pending_reader.length) {
 			this.$reader();
 			return;
 		}
 
-		if (this.step !== 11 && this.pending_reader2.length) {
+		// if (this.step !== 11 && this.pending_reader2.length) {
+		if (this.pending_reader2.length) {
 			this.$reader3();
 			return;
 		}
 
-		if (this.step !== 10 && this.pending_streamer.length) {
+		// if (this.step !== 10 && this.pending_streamer.length) {
+		if (this.pending_streamer.length) {
 			this.$streamer();
 			return;
 		}
@@ -556,9 +556,9 @@ DP.$reader = function() {
 	}
 
 	var list = self.pending_reader.splice(0);
-	self.$reading = true;
+	self.$reading++;
 	self.$reader2(self.filename, list, function() {
-		self.$reading = false;
+		self.$reading--;
 		self.next(0);
 	});
 	return self;
@@ -604,7 +604,7 @@ DP.$reader3 = function() {
 		return self;
 	}
 
-	self.$reading = true;
+	self.$reading++;
 
 	var fs = new NoSQLStream(self.filename);
 	var filters = new NoSQLReader(self.pending_reader2.splice(0));
@@ -621,7 +621,7 @@ DP.$reader3 = function() {
 
 	fs.$callback = function() {
 		filters.done();
-		self.$reading = false;
+		self.$reading--;
 		fs = null;
 		self.next(0);
 	};
@@ -640,7 +640,7 @@ DP.$streamer = function() {
 		return self;
 	}
 
-	self.$reading = true;
+	self.$reading++;
 
 	var filter = self.pending_streamer.splice(0);
 	var length = filter.length;
@@ -666,7 +666,7 @@ DP.$streamer = function() {
 	fs.$callback = function() {
 		for (var i = 0; i < length; i++)
 			filter[i].callback && filter[i].callback(null, filter[i].repository, count);
-		self.$reading = false;
+		self.$reading--;
 		self.next(0);
 		fs = null;
 	};
@@ -992,7 +992,6 @@ TP.next = function(type) {
 		}
 
 		if (this.step !== 13 && this.pending_clean.length) {
-			console.log('OK');
 			this.$clean();
 			return;
 		}
@@ -1026,19 +1025,22 @@ TP.next = function(type) {
 		}
 	}
 
-	if (!this.$reading) {
+	if (this.$reading < MAXREADERS) {
 
-		if (this.step !== 4 && this.pending_reader.length) {
+		// if (this.step !== 4 && this.pending_reader.length) {
+		if (this.pending_reader.length) {
 			this.$reader();
 			return;
 		}
 
-		if (this.step !== 11 && this.pending_reader2.length) {
+		// if (this.step !== 11 && this.pending_reader2.length) {
+		if (this.pending_reader2.length) {
 			this.$reader3();
 			return;
 		}
 
-		if (this.step !== 10 && this.pending_streamer.length) {
+		// if (this.step !== 10 && this.pending_streamer.length) {
+		if (this.pending_streamer.length) {
 			this.$streamer();
 			return;
 		}
@@ -1092,7 +1094,7 @@ TP.$reader = function() {
 		return self;
 	}
 
-	self.$reading = true;
+	self.$reading++;
 
 	var fs = new NoSQLStream(self.filename);
 	var filters = new NoSQLReader(self.pending_reader.splice(0));
@@ -1129,7 +1131,7 @@ TP.$reader = function() {
 	fs.$callback = function() {
 		filters.done();
 		fs = null;
-		self.$reading = false;
+		self.$reading--;
 		self.next(0);
 	};
 
@@ -1148,7 +1150,7 @@ TP.$reader3 = function() {
 		return self;
 	}
 
-	self.$reading = true;
+	self.$reading++;
 
 	var fs = new NoSQLStream(self.filename);
 	var filters = new NoSQLReader(self.pending_reader2.splice(0));
@@ -1186,7 +1188,7 @@ TP.$reader3 = function() {
 	fs.$callback = function() {
 		filters.done();
 		fs = null;
-		self.$reading = false;
+		self.$reading--;
 		self.next(0);
 	};
 
@@ -1459,7 +1461,7 @@ TP.$streamer = function() {
 		return self;
 	}
 
-	self.$reading = true;
+	self.$reading++;
 
 	var filter = self.pending_streamer.splice(0);
 	var length = filter.length;
@@ -1493,7 +1495,7 @@ TP.$streamer = function() {
 	fs.$callback = function() {
 		for (var i = 0; i < length; i++)
 			filter[i].callback && filter[i].callback(null, filter[i]);
-		self.$reading = false;
+		self.$reading--;
 		self.next(0);
 		fs = null;
 	};
@@ -1978,6 +1980,11 @@ function nosql() {
 	// database.update().filter('item.id==="161256001hl61b"').modify('item.price=100020').callback(console.log);
 	// database.remove().filter('item.id==="161256001hl61b"').callback(console.log);
 	// database.clean();
+
+	database.find().filter(true).take(5).sort('price', true).callback(console.log);
+	// for (var i = 0; i < 10000; i++)
+	//  	database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
+
 }
 
 function table() {
@@ -1991,10 +1998,10 @@ function table() {
 	// database.clean(console.log);
 
 	database.find().filter(true).take(5).sort('price', true).callback(console.log);
-	// <for (var i = 0; i < 10000; i++)
+
+	// for (var i = 0; i < 10000; i++)
 	// 	database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
 }
 
 // table();
-// nosql();
-table();
+nosql();
