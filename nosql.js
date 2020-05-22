@@ -20,7 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /**
- * @module NoSQL
+ * @module TextDB
  * @version 1.0.0
  */
 
@@ -229,7 +229,8 @@ DP.backup = function(filename, callback) {
 };
 
 DP.drop = function() {
-	var self = this;	self.pending_drops = true;
+	var self = this;
+	self.pending_drops = true;
 	setImmediate(next_operation, self, 7);
 	return self;
 };
@@ -852,7 +853,8 @@ TP.remove = function() {
 };
 
 TP.find = function(builder) {
-	var self = this;	if (builder)
+	var self = this;
+	if (builder)
 		builder.db = self;
 	else
 		builder = new QueryBuilder(self);
