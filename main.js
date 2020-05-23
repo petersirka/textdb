@@ -9,6 +9,7 @@ exports.init = function(type, name, directory, callback) {
 	instance.on('message', function(msg) {
 		switch (msg.TYPE) {
 			case 'stats':
+				msg.TYPE = undefined;
 				instance.stats = msg;
 				instance.emit('stats', msg);
 				break;
@@ -19,6 +20,8 @@ exports.init = function(type, name, directory, callback) {
 				var cb = msg.id ? instance.callbacks[msg.id] : null;
 				if (cb) {
 					delete instance.callbacks[msg.id];
+					msg.TYPE = undefined;
+					msg.id = undefined;
 					cb(msg);
 				}
 				break;
@@ -62,7 +65,7 @@ function prepare(instance) {
 		if (callback)
 			instance.callbacks[builder.id] = callback;
 
-		instance.send({ TYPE: 'find2', builder: builder });
+		instance.send({ TYPE: 'remove', builder: builder });
 	};
 
 	instance.cmd_update = function(builder, callback) {

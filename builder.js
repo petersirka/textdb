@@ -174,7 +174,13 @@ QueryBuilder.prototype.filter = function(rule, arg) {
 	var self = this;
 	if (arg)
 		self.filterarg = arg;
-	self.filterrule = new Function('doc', 'arg', 'return ' + rule);
+
+	var tmp = FUNCCACHE[rule];
+	if (tmp)
+		self.filterrule = tmp;
+	else
+		FUNCCACHE[rule] = self.filterrule = new Function('doc', 'arg', 'return ' + rule);
+
 	return self;
 };
 

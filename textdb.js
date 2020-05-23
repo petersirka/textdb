@@ -478,7 +478,7 @@ JD.$append = function() {
 				var builder = items[i];
 				builder.duration = diff;
 				builder.counter = builder.count = 1;
-				builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+				builder.filterarg = builder.modifyarg = builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 				builder.logrule && builder.logrule();
 				builder.$callback && builder.$callback(err, builder);
 			}
@@ -567,7 +567,7 @@ JD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+			builder.filterarg = builder.modifyarg = builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.logrule && builder.logrule();
 			builder.$callback && builder.$callback(null, builder);
 		}
@@ -1115,7 +1115,7 @@ TD.$append = function() {
 				var builder = items[i];
 				builder.duration = diff;
 				builder.counter = builder.count = 1;
-				builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+				builder.filterarg = builder.modifyarg = builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 				builder.logrule && builder.logrule();
 				builder.$callback && builder.$callback(err, builder);
 			}
@@ -1332,7 +1332,7 @@ TD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+			builder.filterarg = builder.modifyarg = builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.$callback && builder.$callback(null, builder);
 		}
 
@@ -2007,7 +2007,7 @@ TextReader.prototype.callback = function(builder) {
 	for (var i = 0; i < builder.response.length; i++)
 		builder.response[i] = builder.prepare(builder.response[i]);
 	builder.logrule && builder.logrule();
-	builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+	builder.filterarg = builder.modifyarg = builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 	builder.$callback(null, builder);
 	return self;
 };

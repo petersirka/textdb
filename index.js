@@ -165,7 +165,6 @@ ROUTE('POST /collections/{id}/databases/{name}/query/', function() {
 	// self.body.command = '';
 	// self.body.builder = {};
 	var instance = db.instance;
-
 	switch (self.body.command) {
 		case 'find':
 			instance.cmd_find(self.body.builder, self.callback());
@@ -307,4 +306,4 @@ var instance = Main.init('nosql', 'skuska', '', function() {
 */
 
 ON('ready', reloadcollections);
-F.http('debug');
+F.http('release');
