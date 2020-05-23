@@ -1,4 +1,4 @@
-// Copyright 2018-2020 (c) Peter Širka <petersirka@gmail.com>
+// Copyright 2020 (c) Peter Širka <petersirka@gmail.com>
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
@@ -20,8 +20,8 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 /**
- * @module NoSQL Stream
- * @version 1.0.1
+ * @module TextStreamReader
+ * @version 1.0.0
  */
 
 const Fs = require('fs');
@@ -30,7 +30,7 @@ const BUFFERDOCS = 15;
 const NEWLINEBUFFER = Buffer.from('\n', 'utf8');
 const DEFSTATS = { size: 0 };
 
-function NoSQLStream(filename) {
+function TextStreamReader(filename) {
 	this.filename = filename;
 	this.fd = null;
 	this.stats = DEFSTATS;
@@ -52,10 +52,10 @@ function NoSQLStream(filename) {
 	// this.indexer = 0;
 }
 
-const NoSQLStreamProto = NoSQLStream.prototype;
+const TextStreamReaderProto = TextStreamReader.prototype;
 
 // Because of performance
-NoSQLStreamProto.readhelpers = function() {
+TextStreamReaderProto.readhelpers = function() {
 
 	var self = this;
 
@@ -357,13 +357,13 @@ NoSQLStreamProto.readhelpers = function() {
 };
 
 // Because of performance
-NoSQLStreamProto.writehelpers = function() {
+TextStreamReaderProto.writehelpers = function() {
 
 	var self = this;
 
 	self.cb_writeAddUpdAdd = function(err, size) {
 		if (err) {
-			console.log('ERROR --> NoSQLstream.writer (add)', err);
+			console.log('ERROR --> TextStreamReader.writer (add)', err);
 			self.canceled = true;
 			self.bufferstacknew.length = 0;
 			self.bufferstack.length = 0;
@@ -380,7 +380,7 @@ NoSQLStreamProto.writehelpers = function() {
 		self.writing = false;
 
 		if (err) {
-			console.log('ERROR --> NoSQLstream.writer (upd)', err);
+			console.log('ERROR --> TextStreamReader.writer (upd)', err);
 			self.canceled = true;
 			self.bufferstack.length = 0;
 			self.bufferstacknew.length = 0;
@@ -394,7 +394,7 @@ NoSQLStreamProto.writehelpers = function() {
 		self.positionappend += size;
 
 		if (err) {
-			console.log('ERROR --> NoSQLstream.writer (add)', err);
+			console.log('ERROR --> TextStreamReader.writer (add)', err);
 			self.canceled = true;
 		} else
 			self.$write();
@@ -405,7 +405,7 @@ NoSQLStreamProto.writehelpers = function() {
 		self.writing = false;
 
 		if (err) {
-			console.log('ERROR --> NoSQLstream.writer (upd)', err);
+			console.log('ERROR --> TextStreamReader.writer (upd)', err);
 			self.canceled = true;
 		} else
 			self.$write();
@@ -511,7 +511,7 @@ NoSQLStreamProto.writehelpers = function() {
 	};
 };
 
-NoSQLStreamProto.openread = function() {
+TextStreamReaderProto.openread = function() {
 	var self = this;
 	self.type = 'r';
 	self.position = self.start;
@@ -519,7 +519,7 @@ NoSQLStreamProto.openread = function() {
 	return self;
 };
 
-NoSQLStreamProto.openreadreverse = function() {
+TextStreamReaderProto.openreadreverse = function() {
 	var self = this;
 	self.type = 'r';
 	self.position = self.start;
@@ -528,7 +528,7 @@ NoSQLStreamProto.openreadreverse = function() {
 	return self;
 };
 
-NoSQLStreamProto.openupdate = function() {
+TextStreamReaderProto.openupdate = function() {
 	var self = this;
 	self.type = 'r+';
 	Fs.open(self.filename, self.type, function(err, fd) {
@@ -568,7 +568,7 @@ NoSQLStreamProto.openupdate = function() {
 };
 
 // For e.g. files on URL address
-NoSQLStreamProto.openstream = function(stream) {
+TextStreamReaderProto.openstream = function(stream) {
 
 	var self = this;
 
@@ -592,7 +592,7 @@ NoSQLStreamProto.openstream = function(stream) {
 	return self;
 };
 
-NoSQLStreamProto.open = function() {
+TextStreamReaderProto.open = function() {
 	var self = this;
 	Fs.open(self.filename, self.type, function(err, fd) {
 
@@ -624,7 +624,7 @@ NoSQLStreamProto.open = function() {
 	});
 };
 
-NoSQLStreamProto.close = function() {
+TextStreamReaderProto.close = function() {
 
 	var self = this;
 
@@ -656,21 +656,21 @@ NoSQLStreamProto.close = function() {
 	return self;
 };
 
-NoSQLStreamProto.write = function(doc, position) {
+TextStreamReaderProto.write = function(doc, position) {
 	var self = this;
 	self.bufferstack.push({ position: position, data: doc });
 	!self.writing && self.$write();
 	return self;
 };
 
-NoSQLStreamProto.write2 = function(doc) {
+TextStreamReaderProto.write2 = function(doc) {
 	var self = this;
 	self.bufferstacknew.push(Buffer.from(doc));
 	!self.writing && self.$write();
 	return self;
 };
 
-NoSQLStreamProto.$write = function() {
+TextStreamReaderProto.$write = function() {
 	var self = this;
 	if (self.bufferstacknew.length && self.bufferstack.length) {
 		self.writing = true;
@@ -689,7 +689,7 @@ NoSQLStreamProto.$write = function() {
 	}
 };
 
-NoSQLStreamProto.flush = function() {
+TextStreamReaderProto.flush = function() {
 	var self = this;
 	if (self.writing)
 		setTimeout(self.cb_flush, 100);
@@ -698,7 +698,7 @@ NoSQLStreamProto.flush = function() {
 	return self;
 };
 
-NoSQLStreamProto.read = function() {
+TextStreamReaderProto.read = function() {
 
 	var self = this;
 	var size = self.stats.size - self.position;
@@ -727,14 +727,14 @@ NoSQLStreamProto.read = function() {
 	}
 };
 
-NoSQLStreamProto.readreverse = function() {
+TextStreamReaderProto.readreverse = function() {
 	var self = this;
 	self.position = self.stats.size;
 	self.readreverse2();
 	return self;
 };
 
-NoSQLStreamProto.readreverse2 = function() {
+TextStreamReaderProto.readreverse2 = function() {
 	var self = this;
 
 	if (!self.fd || self.position <= self.start || self.canceled) {
@@ -762,7 +762,7 @@ NoSQLStreamProto.readreverse2 = function() {
 	}
 };
 
-NoSQLStreamProto.readupdate = function() {
+TextStreamReaderProto.readupdate = function() {
 
 	var self = this;
 	var size = self.stats.size - self.position;
@@ -790,4 +790,4 @@ NoSQLStreamProto.readupdate = function() {
 	}
 };
 
-module.exports = NoSQLStream;
+module.exports = TextStreamReader;

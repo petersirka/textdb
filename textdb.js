@@ -30,13 +30,11 @@ require('total.js');
 
 const Fs = require('fs');
 const Path = require('path');
-const NoSQLStream = require('./nosqlstream');
+const TextStreamReader = require('./stream');
 const QueryBuilder = require('./builder').QueryBuilder;
 const DELIMITER = '|';
+const NEWLINEBUF = Buffer.from('\n', 'utf8');
 
-const EXTENSION = '.nosql';
-const EXTENSION_TABLE = '.table';
-const EXTENSION_LOG = '.nosql-log';
 const JSONBOOL = '":true ';
 const NEWLINE = '\n';
 const REGBOOL = /":true/g; // for updates of boolean types
@@ -51,10 +49,12 @@ const CACHE = {};
 const JSONBUFFER = 40;
 var CLEANER = {};
 
-function Table(name) {
+function TableDB(name, directory) {
 
 	var t = this;
-	t.filename = name + EXTENSION_TABLE;
+	t.filename = Path.join(directory, name + '.tdb');
+	t.filenameLog = Path.join(directory, name + '.tlog');
+	t.filenameBackup = Path.join(directory, name + '.tbk');
 	t.name = name;
 	t.$name = '$' + name;
 	t.pending_reader = [];
@@ -89,11 +89,13 @@ function Table(name) {
 	});
 }
 
-function Database(name) {
+function JsonDB(name, directory) {
 
 	var self = this;
-	self.filename = name + EXTENSION;
-	self.filenameLog = EXTENSION_LOG;
+
+	self.filename = Path.join(directory, name + '.ndb');
+	self.filenameLog = Path.join(directory, name + '.nlog');
+	self.filenameBackup = Path.join(directory, name + '.nbk');
 
 	self.name = name;
 	self.pending_update = [];
@@ -117,17 +119,17 @@ function Database(name) {
 	};
 }
 
-const TP = Table.prototype;
-const DP = Database.prototype;
+const TD = TableDB.prototype;
+const JD = JsonDB.prototype;
 
-TP.memory = DP.memory = function(count, size) {
+TD.memory = JD.memory = function(count, size) {
 	var self = this;
 	count && (self.buffercount = count + 1);      // def: 15 - count of stored documents in memory while reading/writing
 	size && (self.buffersize = size * 1024);  // def: 32 - size of buffer in kB
 	return self;
 };
 
-TP.alter = function(schema) {
+TD.alter = function(schema) {
 
 	var self = this;
 
@@ -162,7 +164,7 @@ function next_operation(self, type) {
 	self.next(type);
 }
 
-DP.insert = function(doc) {
+JD.insert = function(doc) {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	var json = doc.$$schema ? doc.$clean() : doc;
@@ -171,7 +173,7 @@ DP.insert = function(doc) {
 	return builder;
 };
 
-DP.update = function() {
+JD.update = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	self.pending_update.push(builder);
@@ -179,7 +181,7 @@ DP.update = function() {
 	return builder;
 };
 
-DP.restore = function(filename, callback) {
+TD.restore = JD.restore = function(filename, callback) {
 	var self = this;
 
 	U.wait(() => !self.type, function(err) {
@@ -189,7 +191,8 @@ DP.restore = function(filename, callback) {
 
 		self.type = 9;
 
-		F.restore(filename, F.path.root(), function(err, response) {
+		// Restore
+		F.restore(filename, self.directory, function(err, response) {
 			self.type = 0;
 			callback && callback(err, response);
 		});
@@ -198,7 +201,7 @@ DP.restore = function(filename, callback) {
 	return self;
 };
 
-DP.backup = function(filename, callback) {
+TD.backup = JD.backup = function(filename, callback) {
 
 	var self = this;
 	var list = [];
@@ -206,57 +209,107 @@ DP.backup = function(filename, callback) {
 
 	pending.push(function(next) {
 		F.path.exists(self.filename, function(e) {
-			e && list.push(Path.join(CONF.directory_databases, self.name + EXTENSION));
+			e && list.push(self.filename);
 			next();
 		});
 	});
 
 	pending.push(function(next) {
 		F.path.exists(self.filenameLog, function(e) {
-			e && list.push(Path.join(CONF.directory_databases, self.name + EXTENSION_LOG));
+			e && list.push(self.filenameLog);
+			next();
+		});
+	});
+
+	pending.push(function(next) {
+		F.path.exists(self.filenameBackup, function(e) {
+			e && list.push(self.filenameBackup);
 			next();
 		});
 	});
 
 	pending.async(function() {
-		if (list.length)
+		if (list.length) {
+			// Total.js Backup
 			F.backup(filename, list, callback);
-		else
+		} else
 			callback(new Error('No files for backuping.'));
 	});
 
 	return self;
 };
 
-DP.drop = function() {
+TD.backups = JD.backups = function(callback, builder) {
+
+	var self = this;
+	var isTable = self instanceof TableDB;
+
+	if (!builder)
+		builder = new QueryBuilder(self);
+
+	if (isTable && !self.ready) {
+		setTimeout((self, callback, builder) => self.backups(callback, builder), 500, self, callback, builder);
+		return builder;
+	}
+
+	var stream = Fs.createReadStream(self.filenameBackup);
+	var output = [];
+	var tmp = {};
+
+	tmp.keys = self.$keys;
+
+	stream.on('data', U.streamer(NEWLINEBUF, function(item, index) {
+
+		var end = item.indexOf('|');
+		var meta = item.substring(0, end).trim().parseJSON(true);
+
+		tmp.line = item.substring(end + 1).trim();
+
+		if (isTable)
+			tmp.line = tmp.line.split('|');
+
+		meta.id = index + 1;
+		meta.item = self instanceof TableDB ? self.parseData(tmp) : tmp.line.parseJSON(true);
+
+		// @TODO: missing sorting
+		if (!builder.filterrule || builder.filterrule(meta, builder.filterarg))
+			output.push(builder.prepare(meta));
+
+	}), stream);
+
+	CLEANUP(stream, () => callback(null, output));
+	return builder;
+};
+
+JD.drop = function() {
 	var self = this;
 	self.pending_drops = true;
 	setImmediate(next_operation, self, 7);
 	return self;
 };
 
-TP.clear = DP.clear = function(callback) {
+TD.clear = JD.clear = function(callback) {
 	var self = this;
 	self.pending_clear.push(callback || NOOP);
 	setImmediate(next_operation, self, 12);
 	return self;
 };
 
-TP.clean = DP.clean = function(callback) {
+TD.clean = JD.clean = function(callback) {
 	var self = this;
 	self.pending_clean.push(callback || NOOP);
 	setImmediate(next_operation, self, 13);
 	return self;
 };
 
-TP.lock = DP.lock = function(callback) {
+TD.lock = JD.lock = function(callback) {
 	var self = this;
 	self.pending_locks.push(callback || NOOP);
 	setImmediate(next_operation, self, 14);
 	return self;
 };
 
-DP.remove = function() {
+JD.remove = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	self.pending_remove.push(builder);
@@ -264,7 +317,7 @@ DP.remove = function() {
 	return builder;
 };
 
-DP.find = function(builder) {
+JD.find = function(builder) {
 	var self = this;
 	if (builder instanceof QueryBuilder)
 		builder.db = self;
@@ -275,7 +328,7 @@ DP.find = function(builder) {
 	return builder;
 };
 
-DP.find2 = function(builder) {
+JD.find2 = function(builder) {
 	var self = this;
 	if (builder instanceof QueryBuilder)
 		builder.db = self;
@@ -288,7 +341,7 @@ DP.find2 = function(builder) {
 	return builder;
 };
 
-DP.stream = function(fn, arg, callback) {
+JD.stream = function(fn, arg, callback) {
 	var self = this;
 
 	if (typeof(arg) === 'function') {
@@ -301,42 +354,14 @@ DP.stream = function(fn, arg, callback) {
 	return self;
 };
 
-DP.scalar = function(type, field) {
+JD.scalar = function(type, field) {
 	return this.find().scalar(type, field);
-};
-
-DP.count = function() {
-	var self = this;
-	var builder = new QueryBuilder(self);
-	self.pending_reader.push(builder);
-	setImmediate(next_operation, self, 4);
-	return builder;
-};
-
-DP.one = DP.read = function() {
-	var self = this;
-	var builder = new QueryBuilder(self);
-	builder.first();
-	self.pending_reader.push(builder);
-	setImmediate(next_operation, self, 4);
-	return builder;
-};
-
-DP.one2 = DP.read2 = function() {
-	var self = this;
-	var builder = new QueryBuilder(self);
-	builder.first();
-	self.pending_reader2.push(builder);
-	setImmediate(next_operation, self, 11);
-	return builder;
 };
 
 //  1 append
 //  2 update
 //  3 remove
 //  4 reader
-//  5 views
-//  6 reader views
 //  7 drop
 //  8 backup
 //  9 restore
@@ -348,7 +373,7 @@ DP.one2 = DP.read2 = function() {
 
 const NEXTWAIT = { 7: true, 8: true, 9: true, 12: true, 13: true, 14: true };
 
-DP.next = function(type) {
+JD.next = function(type) {
 
 	if (type && NEXTWAIT[this.step])
 		return;
@@ -426,7 +451,7 @@ DP.next = function(type) {
 // FILE OPERATIONS
 // ======================================================================
 
-DP.$append = function() {
+JD.$append = function() {
 	var self = this;
 	self.step = 1;
 
@@ -448,9 +473,10 @@ DP.$append = function() {
 
 			err && F.error(err, 'NoSQL insert: ' + self.name);
 
-			for (var i = 0, length = items.length; i < length; i++) {
-				var callback = items[i].builder.$callback;
-				callback && callback(err, 1);
+			for (var i = 0; i < items.length; i++) {
+				var builder = items[i].builder;
+				builder.logrule && builder.logrule();
+				builder.$callback && builder.$callback(err, 1);
 			}
 
 			next();
@@ -464,7 +490,7 @@ function next_append(self) {
 	self.next(0);
 }
 
-DP.$update = function() {
+JD.$update = function() {
 
 	var self = this;
 	self.step = 2;
@@ -477,8 +503,8 @@ DP.$update = function() {
 	self.$writting = true;
 
 	var filter = self.pending_update.splice(0);
-	var filters = new NoSQLReader();
-	var fs = new NoSQLStream(self.filename);
+	var filters = new TextReader();
+	var fs = new TextStreamReader(self.filename);
 	var change = false;
 
 	for (var i = 0; i < filter.length; i++)
@@ -490,10 +516,9 @@ DP.$update = function() {
 	if (self.buffercount)
 		fs.buffercount = self.buffercount;
 
-	var update = function(docs, doc, dindex, f, findex) {
-		// var rec = fs.docsbuffer[dindex];
-		// var fil = filter[findex];
+	var update = function(docs, doc, dindex, f) {
 		f.modifyrule(docs[dindex], f.modifyarg);
+		f.backuprule && f.backuprule(fs.docsbuffer[dindex].doc);
 	};
 
 	var updateflush = function(docs, doc, dindex) {
@@ -535,7 +560,8 @@ DP.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.$nosqlreader = undefined;
+			builder.db = builder.$TextReader = undefined;
+			builder.logrule && builder.logrule();
 			builder.$callback && builder.$callback(null, builder);
 		}
 
@@ -546,7 +572,7 @@ DP.$update = function() {
 	return self;
 };
 
-DP.$reader = function() {
+JD.$reader = function() {
 
 	var self = this;
 	self.step = 4;
@@ -565,11 +591,11 @@ DP.$reader = function() {
 	return self;
 };
 
-DP.$reader2 = function(filename, items, callback, reader) {
+JD.$reader2 = function(filename, items, callback, reader) {
 
 	var self = this;
-	var fs = new NoSQLStream(self.filename);
-	var filters = new NoSQLReader(items);
+	var fs = new TextStreamReader(self.filename);
+	var filters = new TextReader(items);
 
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
@@ -595,7 +621,7 @@ DP.$reader2 = function(filename, items, callback, reader) {
 	return self;
 };
 
-DP.$reader3 = function() {
+JD.$reader3 = function() {
 
 	var self = this;
 	self.step = 11;
@@ -607,8 +633,8 @@ DP.$reader3 = function() {
 
 	self.$reading++;
 
-	var fs = new NoSQLStream(self.filename);
-	var filters = new NoSQLReader(self.pending_reader2.splice(0));
+	var fs = new TextStreamReader(self.filename);
+	var filters = new TextReader(self.pending_reader2.splice(0));
 
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
@@ -631,7 +657,7 @@ DP.$reader3 = function() {
 	return self;
 };
 
-DP.$streamer = function() {
+JD.$streamer = function() {
 
 	var self = this;
 	self.step = 10;
@@ -646,7 +672,7 @@ DP.$streamer = function() {
 	var filter = self.pending_streamer.splice(0);
 	var length = filter.length;
 	var count = 0;
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
@@ -660,13 +686,13 @@ DP.$streamer = function() {
 			var json = docs[j];
 			count++;
 			for (var i = 0; i < length; i++)
-				filter[i].fn(json, filter[i].repository, count);
+				filter[i].fn(json, filter[i].arg, count);
 		}
 	};
 
 	fs.$callback = function() {
 		for (var i = 0; i < length; i++)
-			filter[i].callback && filter[i].callback(null, filter[i].repository, count);
+			filter[i].callback && filter[i].callback(null, filter[i].arg, count);
 		self.$reading--;
 		self.next(0);
 		fs = null;
@@ -676,7 +702,7 @@ DP.$streamer = function() {
 	return self;
 };
 
-DP.$remove = function() {
+JD.$remove = function() {
 
 	var self = this;
 	self.step = 3;
@@ -688,9 +714,9 @@ DP.$remove = function() {
 
 	self.$writting = true;
 
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var filter = self.pending_remove.splice(0);
-	var filters = new NoSQLReader(filter);
+	var filters = new TextReader(filter);
 	var change = false;
 
 	if (self.buffersize)
@@ -700,7 +726,7 @@ DP.$remove = function() {
 		fs.buffercount = self.buffercount;
 
 	var remove = function(docs, d, dindex, f) {
-		// var rec = fs.docsbuffer[dindex];
+		f.backuprule && f.backuprule(fs.docsbuffer[dindex].doc);
 		return 1;
 	};
 
@@ -725,7 +751,7 @@ DP.$remove = function() {
 	fs.openupdate();
 };
 
-DP.$clear = function() {
+JD.$clear = function() {
 
 	var self = this;
 	self.step = 12;
@@ -743,7 +769,7 @@ DP.$clear = function() {
 	});
 };
 
-DP.$clean = function() {
+JD.$clean = function() {
 
 	var self = this;
 	self.step = 13;
@@ -760,7 +786,7 @@ DP.$clean = function() {
 	CLEANER[self.name] = undefined;
 	CONF.nosql_logger && PRINTLN('NoSQL embedded "{0}" cleaning (beg)'.format(self.name));
 
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var writer = Fs.createWriteStream(self.filename + '-tmp');
 
 	if (self.buffersize)
@@ -792,7 +818,7 @@ DP.$clean = function() {
 	fs.openread();
 };
 
-DP.$lock = function() {
+JD.$lock = function() {
 
 	var self = this;
 	self.step = 14;
@@ -810,7 +836,7 @@ DP.$lock = function() {
 	});
 };
 
-DP.$drop = function() {
+JD.$drop = function() {
 	var self = this;
 	self.step = 7;
 
@@ -828,7 +854,7 @@ DP.$drop = function() {
 	}, 5);
 };
 
-TP.insert = function(doc) {
+TD.insert = function(doc) {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	self.pending_append.push({ doc: doc, builder: builder });
@@ -836,7 +862,7 @@ TP.insert = function(doc) {
 	return builder;
 };
 
-TP.update = function() {
+TD.update = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	self.pending_update.push(builder);
@@ -844,7 +870,7 @@ TP.update = function() {
 	return builder;
 };
 
-TP.remove = function() {
+TD.remove = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
 	self.pending_remove.push(builder);
@@ -852,7 +878,7 @@ TP.remove = function() {
 	return builder;
 };
 
-TP.find = function(builder) {
+TD.find = function(builder) {
 	var self = this;
 	if (builder)
 		builder.db = self;
@@ -863,7 +889,7 @@ TP.find = function(builder) {
 	return builder;
 };
 
-TP.find2 = function(builder) {
+TD.find2 = function(builder) {
 	var self = this;
 	if (builder)
 		builder.db = self;
@@ -874,19 +900,19 @@ TP.find2 = function(builder) {
 	return builder;
 };
 
-TP.stream = function(fn, repository, callback) {
+TD.stream = function(fn, arg, callback) {
 	var self = this;
-	if (typeof(repository) === 'function') {
-		callback = repository;
-		repository = null;
+	if (typeof(arg) === 'function') {
+		callback = arg;
+		arg = null;
 	}
 
-	self.pending_streamer.push({ fn: fn, callback: callback, repository: repository || {} });
+	self.pending_streamer.push({ fn: fn, callback: callback, arg: arg || {} });
 	setImmediate(next_operation, self, 10);
 	return self;
 };
 
-TP.extend = function(schema, callback) {
+TD.extend = function(schema, callback) {
 	var self = this;
 	self.lock(function(next) {
 
@@ -904,7 +930,7 @@ TP.extend = function(schema, callback) {
 		self.$keys = oldk;
 
 		var count = 0;
-		var fs = new NoSQLStream(self.filename);
+		var fs = new TextStreamReader(self.filename);
 		var data = {};
 		var tmp = self.filename + '-tmp';
 		var writer = Fs.createWriteStream(tmp);
@@ -973,15 +999,15 @@ TP.extend = function(schema, callback) {
 };
 
 
-TP.throwReadonly = function() {
+TD.throwReadonly = function() {
 	throw new Error('Table "{0}" doesn\'t contain any schema'.format(this.name));
 };
 
-TP.scalar = function(type, field) {
+TD.scalar = function(type, field) {
 	return this.find().scalar(type, field);
 };
 
-TP.next = function(type) {
+TD.next = function(type) {
 
 	if (!this.ready || (type && NEXTWAIT[this.step]))
 		return;
@@ -1054,7 +1080,7 @@ TP.next = function(type) {
 	}
 };
 
-TP.$append = function() {
+TD.$append = function() {
 	var self = this;
 	self.step = 1;
 
@@ -1085,7 +1111,7 @@ TP.$append = function() {
 	}, () => setImmediate(next_append, self));
 };
 
-TP.$reader = function() {
+TD.$reader = function() {
 
 	var self = this;
 
@@ -1098,8 +1124,8 @@ TP.$reader = function() {
 
 	self.$reading++;
 
-	var fs = new NoSQLStream(self.filename);
-	var filters = new NoSQLReader(self.pending_reader.splice(0));
+	var fs = new TextStreamReader(self.filename);
+	var filters = new TextReader(self.pending_reader.splice(0));
 	var data = {};
 	var indexer = 0;
 
@@ -1141,7 +1167,7 @@ TP.$reader = function() {
 	return self;
 };
 
-TP.$reader3 = function() {
+TD.$reader3 = function() {
 
 	var self = this;
 
@@ -1154,8 +1180,8 @@ TP.$reader3 = function() {
 
 	self.$reading++;
 
-	var fs = new NoSQLStream(self.filename);
-	var filters = new NoSQLReader(self.pending_reader2.splice(0));
+	var fs = new TextStreamReader(self.filename);
+	var filters = new TextReader(self.pending_reader2.splice(0));
 	var data = {};
 	var indexer = 0;
 
@@ -1198,7 +1224,7 @@ TP.$reader3 = function() {
 	return self;
 };
 
-TP.$update = function() {
+TD.$update = function() {
 
 	var self = this;
 	self.step = 2;
@@ -1210,9 +1236,9 @@ TP.$update = function() {
 
 	self.$writting = true;
 
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var filter = self.pending_update.splice(0);
-	var filters = new NoSQLReader();
+	var filters = new TextReader();
 	var change = false;
 	var indexer = 0;
 	var data = { keys: self.$keys };
@@ -1235,6 +1261,7 @@ TP.$update = function() {
 		// var rec = fs.docsbuffer[dindex];
 		// var fil = filter[findex];
 		f.modifyrule(docs[dindex], f.modifyarg);
+		f.backuprule && f.backuprule(fs.docsbuffer[dindex].doc);
 	};
 
 	var updateflush = function(docs, doc, dindex) {
@@ -1282,7 +1309,7 @@ TP.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.$nosqlreader = undefined;
+			builder.db = builder.$TextReader = undefined;
 			builder.$callback && builder.$callback(null, builder);
 		}
 
@@ -1293,7 +1320,7 @@ TP.$update = function() {
 	return self;
 };
 
-TP.$remove = function() {
+TD.$remove = function() {
 
 	var self = this;
 	self.step = 3;
@@ -1305,9 +1332,9 @@ TP.$remove = function() {
 
 	self.$writting = true;
 
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var filter = self.pending_remove.splice(0);
-	var filters = new NoSQLReader(filter);
+	var filters = new TextReader(filter);
 	var change = false;
 	var indexer = 0;
 
@@ -1325,8 +1352,7 @@ TP.$remove = function() {
 	var data = { keys: self.$keys };
 
 	var remove = function(docs, d, dindex, f) {
-		// var rec = fs.docsbuffer[dindex];
-		// f.builder.$options.backup && f.builder.$backupdoc(rec.doc);
+		f.backuprule && f.backuprule(fs.docsbuffer[dindex].doc);
 		return 1;
 	};
 
@@ -1361,7 +1387,7 @@ TP.$remove = function() {
 	fs.openupdate();
 };
 
-TP.$clean = function() {
+TD.$clean = function() {
 
 	var self = this;
 	self.step = 13;
@@ -1378,7 +1404,7 @@ TP.$clean = function() {
 	CLEANER[self.$name] = undefined;
 	CONF.nosql_logger && PRINTLN('NoSQL Table "{0}" cleaning (beg)'.format(self.name));
 
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var writer = Fs.createWriteStream(self.filename + '-tmp');
 
 	writer.write(self.stringifySchema() + NEWLINE);
@@ -1414,7 +1440,7 @@ TP.$clean = function() {
 	fs.openread();
 };
 
-TP.$clear = function() {
+TD.$clear = function() {
 
 	var self = this;
 	self.step = 12;
@@ -1435,7 +1461,7 @@ TP.$clear = function() {
 	});
 };
 
-TP.$lock = function() {
+TD.$lock = function() {
 
 	var self = this;
 	self.step = 14;
@@ -1453,7 +1479,7 @@ TP.$lock = function() {
 	});
 };
 
-TP.$streamer = function() {
+TD.$streamer = function() {
 
 	var self = this;
 	self.step = 10;
@@ -1468,7 +1494,7 @@ TP.$streamer = function() {
 	var filter = self.pending_streamer.splice(0);
 	var length = filter.length;
 	var count = 0;
-	var fs = new NoSQLStream(self.filename);
+	var fs = new TextStreamReader(self.filename);
 	var data = {};
 
 	data.keys = self.$keys;
@@ -1490,7 +1516,7 @@ TP.$streamer = function() {
 			data.index = count++;
 			var doc = self.parseData(data);
 			for (var i = 0; i < length; i++)
-				filter[i].fn(doc, filter[i].repository, count);
+				filter[i].fn(doc, filter[i].arg, count);
 		}
 	};
 
@@ -1506,12 +1532,12 @@ TP.$streamer = function() {
 	return self;
 };
 
-TP.allocations = function(enable) {
+TD.allocations = function(enable) {
 	this.$allocations = enable;
 	return this;
 };
 
-TP.parseSchema = function() {
+TD.parseSchema = function() {
 	var self = this;
 	var arr = arguments[0] instanceof Array ? arguments[0] : arguments;
 	var sized = true;
@@ -1573,7 +1599,7 @@ TP.parseSchema = function() {
 	return self;
 };
 
-TP.stringifySchema = function() {
+TD.stringifySchema = function() {
 
 	var self = this;
 	var data = [];
@@ -1617,7 +1643,7 @@ TP.stringifySchema = function() {
 	return data.join(DELIMITER);
 };
 
-TP.parseData = function(data, cache) {
+TD.parseData = function(data, cache) {
 
 	var self = this;
 	var obj = {};
@@ -1684,7 +1710,7 @@ TP.parseData = function(data, cache) {
 	return obj;
 };
 
-TP.stringify = function(doc, insert, byteslen) {
+TD.stringify = function(doc, insert, byteslen) {
 
 	var self = this;
 	var output = '';
@@ -1838,7 +1864,7 @@ function jsonparser(key, value) {
 	return typeof(value) === 'string' && value.isJSONDate() ? new Date(value) : value;
 }
 
-function NoSQLReader(builder) {
+function TextReader(builder) {
 	var self = this;
 	self.ts = Date.now();
 	self.cancelable = true;
@@ -1847,13 +1873,13 @@ function NoSQLReader(builder) {
 	builder && self.add(builder);
 }
 
-NoSQLReader.prototype.add = function(builder) {
+TextReader.prototype.add = function(builder) {
 	var self = this;
 	if (builder instanceof Array) {
 		for (var i = 0; i < builder.length; i++)
 			self.add(builder[i]);
 	} else {
-		builder.$nosqlreader = self;
+		builder.$TextReader = self;
 		if (builder.$sortname)
 			self.cancelable = false;
 		self.builders.push(builder);
@@ -1861,7 +1887,7 @@ NoSQLReader.prototype.add = function(builder) {
 	return self;
 };
 
-NoSQLReader.prototype.compare2 = function(docs, custom, done) {
+TextReader.prototype.compare2 = function(docs, custom, done) {
 	var self = this;
 
 	for (var i = 0; i < docs.length; i++) {
@@ -1914,7 +1940,7 @@ NoSQLReader.prototype.compare2 = function(docs, custom, done) {
 	}
 };
 
-NoSQLReader.prototype.compare = function(docs) {
+TextReader.prototype.compare = function(docs) {
 
 	var self = this;
 	for (var i = 0; i < docs.length; i++) {
@@ -1955,16 +1981,18 @@ NoSQLReader.prototype.compare = function(docs) {
 	}
 };
 
-NoSQLReader.prototype.callback = function(builder) {
+TextReader.prototype.callback = function(builder) {
 	var self = this;
 	for (var i = 0; i < builder.items.length; i++)
-		builder.items[i] = builder.transform(builder.items[i]);
-	builder.$nosqlreader = undefined;
+		builder.items[i] = builder.prepare(builder.items[i]);
+	builder.$TextReader = undefined;
+	builder.db = undefined;
+	builder.logrule && builder.logrule();
 	builder.$callback(null, builder);
 	return self;
 };
 
-NoSQLReader.prototype.done = function() {
+TextReader.prototype.done = function() {
 	var self = this;
 	var diff = Date.now() - self.ts;
 	for (var i = 0; i < self.builders.length; i++) {
@@ -1975,35 +2003,5 @@ NoSQLReader.prototype.done = function() {
 	return self;
 };
 
-function nosql() {
-	var database = new Database('test');
-	// database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
-	// database.find().filter('true').callback(console.log);
-	// database.update().filter('item.id==="161256001hl61b"').modify('item.price=100020').callback(console.log);
-	// database.remove().filter('item.id==="161256001hl61b"').callback(console.log);
-	// database.clean();
-
-	database.find().filter(true).take(5).sort('price', true).callback(console.log);
-	// for (var i = 0; i < 10000; i++)
-	//  	database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
-
-}
-
-function table() {
-	var database = new Table('test');
-
-	// database.alter('id:string,price:number,name:string,date:Date');
-	// database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
-	// database.find().filter('true').callback(console.log);
-	// database.update().filter('item.id==="161295001rj61b"').modify('item.price=101').callback(console.log);
-	// database.remove().filter('item.id==="161295001rj61b"').callback(console.log);
-	// database.clean(console.log);
-
-	database.find().filter(true).take(5).sort('price', true).callback(console.log);
-
-	// for (var i = 0; i < 10000; i++)
-	// 	database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
-}
-
-// table();
-nosql();
+exports.JsonDB = JsonDB;
+exports.TableDB = TableDB;

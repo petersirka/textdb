@@ -1,10 +1,16 @@
 // Dependencies
 const DButils = require('./utils');
+const Fs = require('fs');
+const NEWLINE = '\n';
+
+function errorhandling(err) {
+}
 
 // Dependencies
-function QueryBuilder() {
+function QueryBuilder(db) {
 
 	var t = this;
+	t.db = db;
 	t.items = [];
 	t.count = 0;
 	t.counter = 0;
@@ -26,21 +32,44 @@ QueryBuilder.prototype.fields = function(value) {
 	return self;
 };
 
-QueryBuilder.prototype.transform = function(doc) {
+QueryBuilder.prototype.transform = function(rule, arg) {
+	var self = this;
+	if (arg)
+		self.transformarg = arg;
+	self.transformrule = new Function('item', 'arg', 'return ' + rule);
+	return self;
+};
+
+QueryBuilder.prototype.prepare = function(doc) {
 
 	var self = this;
-	if (!self.$fields)
-		return doc;
+	var obj;
 
-	var obj = {};
+	if (self.$fields) {
 
-	// @TODO: add a custom transformation
-	for (var i = 0; i < self.$fields.length; i++) {
-		var name = self.$fields[i];
-		obj[name] = doc[name];
+		obj = {};
+
+		// @TODO: add a custom transformation
+		for (var i = 0; i < self.$fields.length; i++) {
+			var name = self.$fields[i];
+			obj[name] = doc[name];
+		}
 	}
 
-	return obj;
+	if (self.transformrule) {
+
+		// Clone data
+		if (!obj) {
+			obj = {};
+			var keys = Object.keys(doc);
+			for (var i = 0; i < keys.length; i++)
+				obj[keys[i]] = doc[keys[i]];
+		}
+
+		self.transformrule(obj, self.transformarg);
+	}
+
+	return obj || doc;
 };
 
 QueryBuilder.prototype.push = function(item) {
@@ -99,6 +128,35 @@ QueryBuilder.prototype.scalar = function(rule, arg) {
 QueryBuilder.prototype.callback = function(fn) {
 	var self = this;
 	self.$callback = fn;
+	return self;
+};
+
+QueryBuilder.prototype.backup = function(user, name) {
+	var self = this;
+	self.backuparg = { user: user, name: name };
+	self.backuprule = self.backupitem;
+	console.log(self.backuprule);
+	return self;
+};
+
+QueryBuilder.prototype.log = function(data) {
+	var self = this;
+	data.date = new Date();
+	self.logarg = JSON.stringify(data) + NEWLINE;
+	self.logrule = self.logitem;
+	return self;
+};
+
+// Internal
+QueryBuilder.prototype.backupitem = function(item) {
+	var self = this;
+	self.backuparg.date = new Date();
+	Fs.appendFile(self.db.filenameBackup, JSON.stringify(self.backuparg) + ' | ' + (typeof(item) === 'string' ? item : JSON.stringify(item)) + NEWLINE, errorhandling);
+};
+
+QueryBuilder.prototype.logitem = function() {
+	var self = this;
+	Fs.appendFile(self.db.filenameLog, self.logarg, errorhandling);
 	return self;
 };
 
