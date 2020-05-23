@@ -45,9 +45,7 @@ const BOOLEAN = { '1': 1, 'true': 1, 'on': 1 };
 const TABLERECORD = { '+': 1, '-': 1, '*': 1 };
 const MAXREADERS = 3;
 
-const CACHE = {};
 const JSONBUFFER = 40;
-var CLEANER = {};
 
 function TableDB(name, directory) {
 
@@ -70,7 +68,6 @@ function TableDB(name, directory) {
 
 	t.step = 0;
 	t.ready = false;
-	t.$free = true;
 	t.$writting = false;
 	t.$reading = 0;
 	t.$allocations = true;
@@ -91,31 +88,30 @@ function TableDB(name, directory) {
 
 function JsonDB(name, directory) {
 
-	var self = this;
+	var t = this;
 
-	self.filename = Path.join(directory, name + '.ndb');
-	self.filenameLog = Path.join(directory, name + '.nlog');
-	self.filenameBackup = Path.join(directory, name + '.nbk');
+	t.filename = Path.join(directory, name + '.ndb');
+	t.filenameLog = Path.join(directory, name + '.nlog');
+	t.filenameBackup = Path.join(directory, name + '.nbk');
 
-	self.name = name;
-	self.pending_update = [];
-	self.pending_append = [];
-	self.pending_reader = [];
-	self.pending_remove = [];
-	self.pending_reader2 = [];
-	self.pending_streamer = [];
-	self.pending_clean = [];
-	self.pending_clear = [];
-	self.pending_locks = [];
-	self.step = 0;
-	self.pending_drops = false;
-	self.$timeoutmeta;
-	self.$free = true;
-	self.$writting = false;
-	self.$reading = 0;
+	t.name = name;
+	t.pending_update = [];
+	t.pending_append = [];
+	t.pending_reader = [];
+	t.pending_remove = [];
+	t.pending_reader2 = [];
+	t.pending_streamer = [];
+	t.pending_clean = [];
+	t.pending_clear = [];
+	t.pending_locks = [];
+	t.step = 0;
+	t.pending_drops = false;
+	t.$timeoutmeta;
+	t.$writting = false;
+	t.$reading = 0;
 
-	self.next2 = function() {
-		self.next(0);
+	t.next2 = function() {
+		t.next(0);
 	};
 }
 
@@ -164,11 +160,10 @@ function next_operation(self, type) {
 	self.next(type);
 }
 
-JD.insert = function(doc) {
+JD.insert = function(json) {
 	var self = this;
 	var builder = new QueryBuilder(self);
-	var json = doc.$$schema ? doc.$clean() : doc;
-	self.pending_append.push({ doc: JSON.stringify(json).replace(REGBOOL, JSONBOOL), raw: doc, builder: builder });
+	self.pending_append.push({ doc: JSON.stringify(json).replace(REGBOOL, JSONBOOL), builder: builder });
 	setImmediate(next_operation, self, 1);
 	return builder;
 };
@@ -565,7 +560,7 @@ JD.$update = function() {
 			builder.$callback && builder.$callback(null, builder);
 		}
 
-		change && CLEANER[self.name] && (CLEANER[self.name] = 1);
+		// change && CLEANER[self.name] && (CLEANER[self.name] = 1);
 	};
 
 	fs.openupdate();
@@ -745,7 +740,7 @@ JD.$remove = function() {
 		fs = null;
 		self.$writting = false;
 		self.next(0);
-		change && CLEANER[self.name] && (CLEANER[self.name] = 1);
+		// change && CLEANER[self.name] && (CLEANER[self.name] = 1);
 	};
 
 	fs.openupdate();
@@ -781,10 +776,6 @@ JD.$clean = function() {
 
 	var filter = self.pending_clean.splice(0);
 	var length = filter.length;
-	var now = Date.now();
-
-	CLEANER[self.name] = undefined;
-	CONF.nosql_logger && PRINTLN('NoSQL embedded "{0}" cleaning (beg)'.format(self.name));
 
 	var fs = new TextStreamReader(self.filename);
 	var writer = Fs.createWriteStream(self.filename + '-tmp');
@@ -807,7 +798,6 @@ JD.$clean = function() {
 
 	writer.on('finish', function() {
 		Fs.rename(self.filename + '-tmp', self.filename, function() {
-			CONF.nosql_logger && PRINTLN('NoSQL embedded "{0}" cleaning (end, {1}s)'.format(self.name, (((Date.now() - now) / 1000) >> 0)));
 			for (var i = 0; i < length; i++)
 				filter[i]();
 			self.next(0);
@@ -1313,7 +1303,7 @@ TD.$update = function() {
 			builder.$callback && builder.$callback(null, builder);
 		}
 
-		change && CLEANER[self.name] && (CLEANER[self.name] = 1);
+		// change && CLEANER[self.name] && (CLEANER[self.name] = 1);
 	};
 
 	fs.openupdate();
@@ -1381,7 +1371,7 @@ TD.$remove = function() {
 		fs = null;
 		self.$writting = false;
 		self.next(0);
-		change && CLEANER[self.$name] && (CLEANER[self.$name] = 1);
+		// change && CLEANER[self.$name] && (CLEANER[self.$name] = 1);
 	};
 
 	fs.openupdate();
@@ -1399,10 +1389,6 @@ TD.$clean = function() {
 
 	var filter = self.pending_clean.splice(0);
 	var length = filter.length;
-	var now = Date.now();
-
-	CLEANER[self.$name] = undefined;
-	CONF.nosql_logger && PRINTLN('NoSQL Table "{0}" cleaning (beg)'.format(self.name));
 
 	var fs = new TextStreamReader(self.filename);
 	var writer = Fs.createWriteStream(self.filename + '-tmp');
@@ -1429,7 +1415,6 @@ TD.$clean = function() {
 
 	writer.on('finish', function() {
 		Fs.rename(self.filename + '-tmp', self.filename, function() {
-			CONF.nosql_logger && PRINTLN('NoSQL Table "{0}" cleaning (end, {1}s)'.format(self.name, (((Date.now() - now) / 1000) >> 0)));
 			for (var i = 0; i < length; i++)
 				filter[i]();
 			self.next(0);
@@ -1986,8 +1971,8 @@ TextReader.prototype.callback = function(builder) {
 	for (var i = 0; i < builder.items.length; i++)
 		builder.items[i] = builder.prepare(builder.items[i]);
 	builder.$TextReader = undefined;
-	builder.db = undefined;
 	builder.logrule && builder.logrule();
+	builder.db = undefined;
 	builder.$callback(null, builder);
 	return self;
 };

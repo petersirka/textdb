@@ -10,11 +10,11 @@ function nosql() {
 
 	// database.find().filter('true').take(5).fields('id,price').sort('price', true).callback(console.log).log({ user: 'asdlkjsadljas' });
 	// database.update().filter('item.id==="161324003ek61b"').modify('item.price=1').backup({ user: 'Peter' });
-	// database.find().filter('true').take(5).scalar('arg.price=Math.max(arg.price || 0, item.price)', {}).callback(console.log);
+	database.find().filter('true').take(5).scalar('arg.price=Math.max(arg.price || 0, item.price)', {}).callback(console.log);
 	// for (var i = 0; i < 10000; i++)
 	//  	database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
 
-	database.backups(console.log);
+	//database.backups(console.log);
 }
 
 function table() {
