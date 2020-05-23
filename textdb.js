@@ -50,6 +50,7 @@ const JSONBUFFER = 40;
 function TableDB(name, directory) {
 
 	var t = this;
+	t.duration = [];
 	t.filename = Path.join(directory, name + '.tdb');
 	t.filenameLog = Path.join(directory, name + '.tlog');
 	t.filenameBackup = Path.join(directory, name + '.tbk');
@@ -59,7 +60,6 @@ function TableDB(name, directory) {
 	t.pending_reader2 = [];
 	t.pending_update = [];
 	t.pending_append = [];
-	t.pending_reader = [];
 	t.pending_remove = [];
 	t.pending_streamer = [];
 	t.pending_clean = [];
@@ -94,6 +94,7 @@ function JsonDB(name, directory) {
 	t.filenameLog = Path.join(directory, name + '.nlog');
 	t.filenameBackup = Path.join(directory, name + '.nbk');
 
+	t.duration = [];
 	t.name = name;
 	t.pending_update = [];
 	t.pending_append = [];
@@ -231,7 +232,7 @@ TD.backup = JD.backup = function(filename, callback) {
 			// Total.js Backup
 			F.backup(filename, list, callback);
 		} else
-			callback(new Error('No files for backuping.'));
+			callback('No files for backing up.');
 	});
 
 	return self;
@@ -500,6 +501,9 @@ JD.$update = function() {
 	var fs = new TextStreamReader(self.filename);
 	var change = false;
 
+	filters.type = 'update';
+	filters.db = self;
+
 	for (var i = 0; i < filter.length; i++)
 		filters.add(filter[i], true);
 
@@ -590,6 +594,9 @@ JD.$reader2 = function(filename, items, callback, reader) {
 	var fs = new TextStreamReader(self.filename);
 	var filters = new TextReader(items);
 
+	filters.type = 'read2';
+	filters.db = self;
+
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
 
@@ -628,6 +635,9 @@ JD.$reader3 = function() {
 
 	var fs = new TextStreamReader(self.filename);
 	var filters = new TextReader(self.pending_reader2.splice(0));
+
+	filters.type = 'readreverse';
+	filters.db = self;
 
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
@@ -711,6 +721,9 @@ JD.$remove = function() {
 	var filter = self.pending_remove.splice(0);
 	var filters = new TextReader(filter);
 	var change = false;
+
+	filters.type = 'remove';
+	filters.db = self;
 
 	if (self.buffersize)
 		fs.buffersize = self.buffersize;
@@ -1084,7 +1097,7 @@ TD.$append = function() {
 			for (var i = 0; i < items.length; i++) {
 				var builder = items[i];
 				builder.logrule && builder.logrule();
-				builder.callback && builder.callback(err, 1);
+				builder.$callback && builder.$callback(err, 1);
 			}
 			next();
 		});
@@ -1109,6 +1122,9 @@ TD.$reader = function() {
 	var filters = new TextReader(self.pending_reader.splice(0));
 	var data = {};
 	var indexer = 0;
+
+	filters.type = 'read';
+	filters.db = self;
 
 	fs.array = true;
 	fs.start = self.$header;
@@ -1165,6 +1181,9 @@ TD.$reader3 = function() {
 	var filters = new TextReader(self.pending_reader2.splice(0));
 	var data = {};
 	var indexer = 0;
+
+	filters.type = 'readreverse';
+	filters.db = self;
 
 	fs.array = true;
 	fs.start = self.$header;
@@ -1223,6 +1242,9 @@ TD.$update = function() {
 	var change = false;
 	var indexer = 0;
 	var data = { keys: self.$keys };
+
+	filters.type = 'update';
+	filters.db = self;
 
 	for (var i = 0; i < filter.length; i++)
 		filters.add(filter[i], true);
@@ -1318,6 +1340,9 @@ TD.$remove = function() {
 	var filters = new TextReader(filter);
 	var change = false;
 	var indexer = 0;
+
+	filters.type = 'remove';
+	filters.db = self;
 
 	fs.array = true;
 	fs.start = self.$header;
@@ -1970,6 +1995,10 @@ TextReader.prototype.callback = function(builder) {
 TextReader.prototype.done = function() {
 	var self = this;
 	var diff = Date.now() - self.ts;
+
+	if (self.db.duration.push({ type: self.type, duration: diff }) > 20)
+		self.db.duration.shift();
+
 	for (var i = 0; i < self.builders.length; i++) {
 		self.builders[i].duration = diff;
 		self.callback(self.builders[i]);

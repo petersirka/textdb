@@ -1,4 +1,5 @@
 const DB = require('./textdb');
+var STATS = { TYPE: 'stats' };
 var instance;
 
 switch (process.argv[2]) {
@@ -43,7 +44,7 @@ process.on('message', function(msg) {
 			});
 			break;
 		case 'alter':
-			instance.alter(err => process.send({ id: msg.id, err: err }));
+			instance.alter(msg.schema, err => process.send({ id: msg.id, err: err }));
 			break;
 		case 'clean':
 			instance.clean(err => process.send({ id: msg.id, err: err }));
@@ -58,6 +59,17 @@ process.on('message', function(msg) {
 	}
 });
 
+function measure() {
+	STATS.pendingread = instance.pending_reader.length + instance.pending_reader2.length + instance.pending_streamer.length;
+	STATS.pendingwrite = instance.pending_update.length + instance.pending_append.length + instance.pending_remove.length;
+	STATS.memory = (process.memoryUsage().heapUsed / 1024 / 1024).floor(2);
+	STATS.duration = instance.duration;
+	process.send(STATS);
+}
+
 setTimeout(function() {
-	process.send('db:ready');
+	process.send({ TYPE: 'ready' });
+	measure();
 }, 100);
+
+setInterval(measure, 5000);

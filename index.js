@@ -8,21 +8,22 @@ exports.run = function(type, name, directory) {
 	instance.$key = key;
 	instance.callbacks = {};
 	instance.on('message', function(msg) {
-
-		if (msg === 'db:ready') {
-			instance.ready && instance.ready();
-			return;
-		}
-
-		if (msg.id) {
-			var cb = instance.callbacks[msg.id];
-			if (cb) {
-				delete instance.callbacks[msg.id];
-				cb(msg);
-			}
+		switch (msg.TYPE) {
+			case 'stats':
+				instance.stats = msg;
+				break;
+			case 'ready':
+				instance.ready && instance.ready();
+				break;
+			case 'response':
+				var cb = msg.id ? instance.callbacks[msg.id] : null;
+				if (cb) {
+					delete instance.callbacks[msg.id];
+					cb(msg);
+				}
+				break;
 		}
 	});
-
 	prepare(instance);
 	return instance;
 };
@@ -82,11 +83,11 @@ function prepare(instance) {
 		instance.send({ TYPE: 'insert', builder: builder });
 	};
 
-	instance.cmd_alter = function(alter, callback) {
+	instance.cmd_alter = function(schema, callback) {
 		var id = GUID(10);
 		if (callback)
 			instance.callbacks[id] = callback;
-		instance.send({ TYPE: 'alter', id: id, alter: alter });
+		instance.send({ TYPE: 'alter', id: id, schema: schema });
 	};
 
 	instance.cmd_clean = function(callback) {
