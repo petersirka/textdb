@@ -29,6 +29,10 @@ const DButils = require('./utils');
 const Fs = require('fs');
 const NEWLINE = '\n';
 
+var PROPCACHE = {};
+var SORTCACHE = {};
+var FUNCCACHE = {};
+
 function errorhandling(err) {
 }
 
@@ -37,12 +41,10 @@ function QueryBuilder(db) {
 
 	var t = this;
 	t.db = db;
-	t.items = [];
+	t.response = [];
 	t.count = 0;
 	t.counter = 0;
 	t.scanned = 0;
-	t.filterarg = EMPTYOBJECT;
-	t.modifyarg = EMPTYOBJECT;
 	t.$take = 1000;
 	t.$skip = 0;
 
@@ -51,10 +53,45 @@ function QueryBuilder(db) {
 	// t.$sortasc
 }
 
+QueryBuilder.prototype.assign = function(meta) {
+	var self = this;
+	self.id = meta.id;
+	meta.fields && self.fields(meta.fields);
+	meta.sort && self.sort(meta.sort);
+	meta.take && self.take(meta.take);
+	meta.skip && self.skip(meta.skip);
+	meta.modify && self.modify(meta.modify, meta.modifyarg);
+	meta.filter && self.filter(meta.filter, meta.filterarg);
+	meta.scalar && self.scalar(meta.scalar, meta.scalararg);
+	meta.backup && self.backup(meta.backup);
+	meta.payload && (self.payload = meta.payload);
+	meta.log && self.log(meta.log);
+	return self;
+};
+
 QueryBuilder.prototype.fields = function(value) {
 	var self = this;
-	// @TODO: cache it
-	self.$fields = value.split(',').trim();
+	var tmp = PROPCACHE[value];
+	if (!tmp) {
+		self.$fieldsremove = [];
+		self.$fields = [];
+		var keys = value.split(',').trim();
+		for (var i = 0; i < keys.length; i++) {
+			var key = keys[i];
+			if (key[0] === '-')
+				self.$fieldsremove.push(key.substring(1));
+			else
+				self.$fields.push(key);
+		}
+		tmp = { map: self.$fields.length ? self.$fields : null, rem: self.$fieldsremove.length ? self.$fieldsremove : null };
+		PROPCACHE[value] = tmp;
+		if (!self.$fields.length)
+			self.$fields = null;
+		if (!self.$fieldsremove.length)
+			self.$fieldsremove = null;
+	}
+	self.$fields = tmp.map;
+	self.$fieldsremove = tmp.rem;
 	return self;
 };
 
@@ -62,7 +99,7 @@ QueryBuilder.prototype.transform = function(rule, arg) {
 	var self = this;
 	if (arg)
 		self.transformarg = arg;
-	self.transformrule = new Function('item', 'arg', 'return ' + rule);
+	self.transformrule = new Function('doc', 'arg', 'return ' + rule);
 	return self;
 };
 
@@ -72,14 +109,15 @@ QueryBuilder.prototype.prepare = function(doc) {
 	var obj;
 
 	if (self.$fields) {
-
 		obj = {};
-
-		// @TODO: add a custom transformation
 		for (var i = 0; i < self.$fields.length; i++) {
 			var name = self.$fields[i];
 			obj[name] = doc[name];
 		}
+	} else if (self.$fieldsremove) {
+		obj = doc;
+		for (var i = 0; i < self.$fieldsremove.length; i++)
+			obj[self.$fieldsremove[i]] = undefined;
 	}
 
 	if (self.transformrule) {
@@ -102,7 +140,7 @@ QueryBuilder.prototype.push = function(item) {
 	var self = this;
 	if (self.$sortname)
 		return DButils.sort(self, item);
-	self.items.push(item);
+	self.response.push(item);
 	return true;
 };
 
@@ -116,10 +154,19 @@ QueryBuilder.prototype.skip = function(skip) {
 	return this;
 };
 
-QueryBuilder.prototype.sort = function(field, desc) {
+QueryBuilder.prototype.sort = function(field) {
 	var self = this;
-	self.$sortname = field;
-	self.$sortasc = desc !== true;
+	var tmp = SORTCACHE[field];
+
+	if (!tmp) {
+		var index = field.lastIndexOf('_');
+		tmp.name = field.substring(0, index);
+		tmp.asc = field.substring(index + 1) === 'asc';
+		SORTCACHE[field] = tmp;
+	}
+
+	self.$sortname = tmp.name;
+	self.$sortasc = tmp.asc;
 	return self;
 };
 
@@ -127,7 +174,7 @@ QueryBuilder.prototype.filter = function(rule, arg) {
 	var self = this;
 	if (arg)
 		self.filterarg = arg;
-	self.filterrule = new Function('item', 'arg', 'return ' + rule);
+	self.filterrule = new Function('doc', 'arg', 'return ' + rule);
 	return self;
 };
 
@@ -137,17 +184,31 @@ function modifyrule(doc) {
 
 QueryBuilder.prototype.modify = function(rule, arg) {
 	var self = this;
+	var tmp = FUNCCACHE[rule];
+
 	if (arg)
 		self.modifyarg = arg;
-	self.modifyrule = rule ? new Function('item', 'arg', rule) : modifyrule;
+
+	if (tmp)
+		self.modifyrule = tmp;
+	else
+		FUNCCACHE[rule] = self.modifyrule = rule ? new Function('doc', 'arg', rule) : modifyrule;
+
 	return self;
 };
 
 QueryBuilder.prototype.scalar = function(rule, arg) {
 	var self = this;
+	var tmp = FUNCCACHE[rule];
+
 	if (arg)
 		self.scalararg = arg;
-	self.scalarrule = new Function('item', 'arg', rule);
+
+	if (tmp)
+		self.scalarrule = tmp;
+	else
+		FUNCCACHE[rule] = self.scalarrule = new Function('doc', 'arg', rule);
+
 	return self;
 };
 
@@ -157,11 +218,10 @@ QueryBuilder.prototype.callback = function(fn) {
 	return self;
 };
 
-QueryBuilder.prototype.backup = function(user, name) {
+QueryBuilder.prototype.backup = function(meta) {
 	var self = this;
-	self.backuparg = { user: user, name: name };
+	self.backuparg = meta || EMPTYOBJECT;
 	self.backuprule = self.backupitem;
-	console.log(self.backuprule);
 	return self;
 };
 

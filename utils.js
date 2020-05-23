@@ -28,9 +28,9 @@
 const COMPARER = global.Intl.Collator().compare;
 
 exports.sort = function(builder, item) {
-	var length = builder.items.length;
+	var length = builder.response.length;
 	if (length < builder.$take) {
-		length = builder.items.push(item);
+		length = builder.response.push(item);
 
 		var type = builder.$sorttype;
 		if (!type) {
@@ -54,7 +54,7 @@ exports.sort = function(builder, item) {
 			}
 		}
 		if (length >= builder.$take)
-			builder.items.sort((a, b) => sortcompare(type, builder, a, b));
+			builder.response.sort((a, b) => sortcompare(type, builder, a, b));
 		return true;
 	} else
 		return chunkysort(builder, item);
@@ -85,27 +85,27 @@ function sortcompare(type, builder, a, b) {
 function chunkysort(builder, item) {
 
 	var beg = 0;
-	var length = builder.items.length;
+	var length = builder.response.length;
 	var tmp = length - 1;
 	var type = builder.$sorttype;
 
-	var sort = sortcompare(type, builder, item, builder.items[tmp]);
+	var sort = sortcompare(type, builder, item, builder.response[tmp]);
 	if (sort !== -1)
 		return;
 
-	tmp = builder.items.length / 2 >> 0;
-	sort = sortcompare(type, builder, item, builder.items[tmp]);
+	tmp = builder.response.length / 2 >> 0;
+	sort = sortcompare(type, builder, item, builder.response[tmp]);
 
 	if (sort !== -1)
 		beg = tmp + 1;
 
 	for (var i = beg; i < length; i++) {
-		var old = builder.items[i];
+		var old = builder.response[i];
 		var sort = sortcompare(type, builder, item, old);
 		if (sort === -1) {
 			for (var j = length - 1; j > i; j--)
-				builder.items[j] = builder.items[j - 1];
-			builder.items[i] = item;
+				builder.response[j] = builder.response[j - 1];
+			builder.response[i] = item;
 		}
 		return true;
 	}

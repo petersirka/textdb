@@ -121,11 +121,11 @@ const JD = JsonDB.prototype;
 TD.memory = JD.memory = function(count, size) {
 	var self = this;
 	count && (self.buffercount = count + 1);      // def: 15 - count of stored documents in memory while reading/writing
-	size && (self.buffersize = size * 1024);  // def: 32 - size of buffer in kB
+	size && (self.buffersize = size * 1024);      // def: 32 - size of buffer in kB
 	return self;
 };
 
-TD.alter = function(schema) {
+TD.alter = function(schema, callback) {
 
 	var self = this;
 
@@ -140,9 +140,11 @@ TD.alter = function(schema) {
 
 		if (schema && self.stringifySchema() !== schema) {
 			self.$header = Buffer.byteLength(self.stringifySchema()) + 1;
-			self.extend(schema);
-		} else
+			self.extend(schema, callback);
+		} else {
 			self.$header = Buffer.byteLength(schema) + 1;
+			callback && callback();
+		}
 
 		self.next(0);
 
@@ -153,6 +155,7 @@ TD.alter = function(schema) {
 		Fs.writeFileSync(self.filename, bschema + NEWLINE, 'utf8');
 		self.ready = true;
 		self.next(0);
+		callback && callback();
 	}
 };
 
@@ -160,10 +163,10 @@ function next_operation(self, type) {
 	self.next(type);
 }
 
-JD.insert = function(json) {
+JD.insert = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
-	self.pending_append.push({ doc: JSON.stringify(json).replace(REGBOOL, JSONBOOL), builder: builder });
+	self.pending_append.push(builder);
 	setImmediate(next_operation, self, 1);
 	return builder;
 };
@@ -327,10 +330,8 @@ JD.find2 = function(builder) {
 	var self = this;
 	if (builder instanceof QueryBuilder)
 		builder.db = self;
-	else {
+	else
 		builder = new QueryBuilder(self);
-		builder.$options.notall = true;
-	}
 	self.pending_reader2.push(builder);
 	setImmediate(next_operation, self, 11);
 	return builder;
@@ -347,10 +348,6 @@ JD.stream = function(fn, arg, callback) {
 	self.pending_streamer.push({ fn: fn, callback: callback, arg: arg || {} });
 	setImmediate(next_operation, self, 10);
 	return self;
-};
-
-JD.scalar = function(type, field) {
-	return this.find().scalar(type, field);
 };
 
 //  1 append
@@ -460,8 +457,9 @@ JD.$append = function() {
 	self.pending_append.splice(0).limit(JSONBUFFER, function(items, next) {
 
 		var json = '';
-		for (var i = 0, length = items.length; i < length; i++) {
-			json += items[i].doc + NEWLINE;
+		for (var i = 0; i < items.length; i++) {
+			var builder = items[i];
+			json += JSON.stringify(builder.payload) + NEWLINE;
 		}
 
 		Fs.appendFile(self.filename, json, function(err) {
@@ -469,7 +467,7 @@ JD.$append = function() {
 			err && F.error(err, 'NoSQL insert: ' + self.name);
 
 			for (var i = 0; i < items.length; i++) {
-				var builder = items[i].builder;
+				var builder = items[i];
 				builder.logrule && builder.logrule();
 				builder.$callback && builder.$callback(err, 1);
 			}
@@ -555,7 +553,7 @@ JD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.db = builder.$TextReader = undefined;
+			builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.logrule && builder.logrule();
 			builder.$callback && builder.$callback(null, builder);
 		}
@@ -844,10 +842,10 @@ JD.$drop = function() {
 	}, 5);
 };
 
-TD.insert = function(doc) {
+TD.insert = function() {
 	var self = this;
 	var builder = new QueryBuilder(self);
-	self.pending_append.push({ doc: doc, builder: builder });
+	self.pending_append.push(builder);
 	setImmediate(next_operation, self, 1);
 	return builder;
 };
@@ -988,15 +986,6 @@ TD.extend = function(schema, callback) {
 	return self;
 };
 
-
-TD.throwReadonly = function() {
-	throw new Error('Table "{0}" doesn\'t contain any schema'.format(this.name));
-};
-
-TD.scalar = function(type, field) {
-	return this.find().scalar(type, field);
-};
-
 TD.next = function(type) {
 
 	if (!this.ready || (type && NEXTWAIT[this.step]))
@@ -1085,15 +1074,17 @@ TD.$append = function() {
 
 		var data = '';
 
-		for (var i = 0, length = items.length; i < length; i++)
-			data += self.stringify(items[i].doc, true) + NEWLINE;
+		for (var i = 0; i < items.length; i++) {
+			var builder = items[i];
+			data += self.stringify(builder.payload, true) + NEWLINE;
+		}
 
 		Fs.appendFile(self.filename, data, function(err) {
 			err && F.error(err, 'Table insert: ' + self.name);
-			for (var i = 0, length = items.length; i < length; i++) {
-				// items[i].builder.$options.log && items[i].builder.log();
-				var callback = items[i].builder.$callback;
-				callback && callback(err, 1);
+			for (var i = 0; i < items.length; i++) {
+				var builder = items[i];
+				builder.logrule && builder.logrule();
+				builder.callback && builder.callback(err, 1);
 			}
 			next();
 		});
@@ -1299,7 +1290,7 @@ TD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.db = builder.$TextReader = undefined;
+			builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.$callback && builder.$callback(null, builder);
 		}
 
@@ -1957,7 +1948,7 @@ TextReader.prototype.compare = function(docs) {
 				else
 					builder.push(doc);
 
-				if (self.cancelable && !builder.$sortname && builder.items.length === builder.$take) {
+				if (self.cancelable && !builder.$sortname && builder.response.length === builder.$take) {
 					builder.canceled = true;
 					self.canceled++;
 				}
@@ -1968,11 +1959,10 @@ TextReader.prototype.compare = function(docs) {
 
 TextReader.prototype.callback = function(builder) {
 	var self = this;
-	for (var i = 0; i < builder.items.length; i++)
-		builder.items[i] = builder.prepare(builder.items[i]);
-	builder.$TextReader = undefined;
+	for (var i = 0; i < builder.response.length; i++)
+		builder.response[i] = builder.prepare(builder.response[i]);
 	builder.logrule && builder.logrule();
-	builder.db = undefined;
+	builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 	builder.$callback(null, builder);
 	return self;
 };

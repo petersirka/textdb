@@ -1,5 +1,7 @@
-const DB = require('./textdb');
+// const DB = require('./textdb');
+const Main = require('./index');
 
+/*
 function nosql() {
 	var database = new DB.JsonDB('test', '');
 	// database.insert({ id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() });
@@ -37,3 +39,12 @@ function table() {
 
 // table();
 nosql();
+*/
+
+var instance = Main.run('nosql', 'skuska', '');
+instance.ready = function() {
+	// instance.cmd_insert({ payload: { id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() }}, console.log);
+	instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
+	instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
+	instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
+};
