@@ -458,6 +458,8 @@ JD.$append = function() {
 	self.pending_append.splice(0).limit(JSONBUFFER, function(items, next) {
 
 		var json = '';
+		var now = Date.now();
+
 		for (var i = 0; i < items.length; i++) {
 			var builder = items[i];
 			json += JSON.stringify(builder.payload) + NEWLINE;
@@ -467,10 +469,18 @@ JD.$append = function() {
 
 			err && F.error(err, 'NoSQL insert: ' + self.name);
 
+			var diff = Date.now() - now;
+
+			if (self.duration.push({ type: 'insert', duration: diff }) > 20)
+				self.duration.shift();
+
 			for (var i = 0; i < items.length; i++) {
 				var builder = items[i];
+				builder.duration = diff;
+				builder.counter = builder.count = 1;
+				builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 				builder.logrule && builder.logrule();
-				builder.$callback && builder.$callback(err, 1);
+				builder.$callback && builder.$callback(err, builder);
 			}
 
 			next();
@@ -557,7 +567,7 @@ JD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+			builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.logrule && builder.logrule();
 			builder.$callback && builder.$callback(null, builder);
 		}
@@ -1086,6 +1096,7 @@ TD.$append = function() {
 	self.pending_append.splice(0).limit(JSONBUFFER, function(items, next) {
 
 		var data = '';
+		var now = Date.now();
 
 		for (var i = 0; i < items.length; i++) {
 			var builder = items[i];
@@ -1094,10 +1105,19 @@ TD.$append = function() {
 
 		Fs.appendFile(self.filename, data, function(err) {
 			err && F.error(err, 'Table insert: ' + self.name);
+
+			var diff = Date.now() - now;
+
+			if (self.duration.push({ type: 'insert', duration: diff }) > 20)
+				self.duration.shift();
+
 			for (var i = 0; i < items.length; i++) {
 				var builder = items[i];
+				builder.duration = diff;
+				builder.counter = builder.count = 1;
+				builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 				builder.logrule && builder.logrule();
-				builder.$callback && builder.$callback(err, 1);
+				builder.$callback && builder.$callback(err, builder);
 			}
 			next();
 		});
@@ -1312,7 +1332,7 @@ TD.$update = function() {
 
 		for (var i = 0; i < filters.builders.length; i++) {
 			var builder = filters.builders[i];
-			builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+			builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 			builder.$callback && builder.$callback(null, builder);
 		}
 
@@ -1987,7 +2007,7 @@ TextReader.prototype.callback = function(builder) {
 	for (var i = 0; i < builder.response.length; i++)
 		builder.response[i] = builder.prepare(builder.response[i]);
 	builder.logrule && builder.logrule();
-	builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
+	builder.payload = builder.$fields = builder.$fieldsremove = builder.db = builder.$TextReader = builder.$take = builder.$skip = undefined;
 	builder.$callback(null, builder);
 	return self;
 };
