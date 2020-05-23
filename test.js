@@ -41,12 +41,11 @@ function table() {
 nosql();
 */
 
-var instance = Main.run('nosql', 'skuska', '');
-
-instance.ready = function() {
-	// 	instance.cmd_insert({ payload: { id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() }}, console.log);
+var instance = Main.init('nosql', 'skuska', '', function() {
+	console.log('OK');
+	// instance.cmd_insert({ payload: { id: UID(), name: GUID(30), price: U.random(100, 50), date: new Date() }}, console.log);
 	// instance.cmd_alter('id:string,name:string,price:number,date:Date');
 	// instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
 	// instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
 	// instance.cmd_find2({ filter: 'doc', fields: 'id,price' }, console.log);
-};
+});
