@@ -2,7 +2,7 @@ require('total.js');
 const Fork = require('child_process').fork;
 var INSTANCES = {};
 
-exports.run = function(type, name, directory) {
+exports.init = function(type, name, directory, callback) {
 	var key = (type + '_' + name + '_directory').hash(true) + '';
 	var instance = INSTANCES[key] = Fork('./worker.js', [type, name, directory], { cwd: directory });
 	instance.$key = key;
@@ -11,9 +11,10 @@ exports.run = function(type, name, directory) {
 		switch (msg.TYPE) {
 			case 'stats':
 				instance.stats = msg;
+				instance.emit('stats', msg);
 				break;
 			case 'ready':
-				instance.ready && instance.ready();
+				callback && callback();
 				break;
 			case 'response':
 				var cb = msg.id ? instance.callbacks[msg.id] : null;
