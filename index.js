@@ -238,7 +238,10 @@ function reloadcollections() {
 				db = instance.databases[item.name] = {};
 				db.stamp = stamp;
 				db.dir = dir;
-				db.instance = Main.init(item.type, item.name, dir);
+				db.instance = Main.init(item.type, item.name, dir, function() {
+					if (item.type === 'table' && item.schema)
+						db.instance.cmd_alter(item.schema);
+				});
 			}
 		}
 
