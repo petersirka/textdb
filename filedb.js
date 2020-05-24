@@ -279,10 +279,8 @@ function ext(name) {
 	return index === -1 ? '' : name.substring(index + 1).toLowerCase();
 }
 
-var fd = new FileDB('images', 'images.fdb');
-
+// var fd = new FileDB('images', 'images.fdb');
 // fd.clear(console.log);
-
 // fd.save(UID(), 'logo.png', '/Users/petersirka/Desktop/logo.png', console.log);
 // fd.count(console.log);
 // fd.read('163685001cy61b', console.log, true);
