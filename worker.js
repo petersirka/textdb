@@ -4,13 +4,13 @@ var instance;
 
 switch (process.argv[2]) {
 	case 'nosql':
-		instance = new require('./textdb').JsonDB(process.argv[3], process.argv[4]);
+		instance = require('./textdb').JsonDB(process.argv[3], process.argv[4]);
 		break;
 	case 'table':
-		instance = new require('./textdb').TableDB(process.argv[3], process.argv[4]);
+		instance = require('./textdb').TableDB(process.argv[3], process.argv[4]);
 		break;
 	case 'binary':
-		instance = new require('./filedb').FileDB(process.argv[3], process.argv[4]);
+		instance = require('./filedb').FileDB(process.argv[3], process.argv[4]);
 		break;
 }
 

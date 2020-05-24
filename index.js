@@ -4,11 +4,41 @@ const Main = require('./main');
 const Path = require('path');
 const COLLECTIONS = {};
 const DIRECTORY = Path.join(process.cwd(), 'databases/');
+var DBCACHE = {};
 
 NEWSCHEMA('Collections', function(schema) {
 
+	schema.define('icon', 'String(20)');
 	schema.define('name', String, true);
-	schema.define('token', '[String]');
+
+	schema.setQuery(function($) {
+		var collections = PREF.collections || {};
+		var keys = Object.keys(collections);
+		var output = [];
+
+		for (var i = 0; i < keys.length; i++) {
+			var item = collections[keys[i]];
+			var obj = {};
+			obj.id = item.id;
+			obj.icon = item.icon;
+			obj.name = item.name;
+			obj.token = item.token;
+			obj.databases = [];
+			for (var j = 0; j < item.databases.length; j++) {
+				var item2 = item.databases[j];
+				var obj2 = {};
+				obj2.type = item2.type;
+				obj2.id = item2.id;
+				obj2.icon = item2.icon;
+				obj2.name = item2.name;
+				obj.databases.push(obj2);
+			}
+
+			output.push(obj);
+		}
+
+		$.callback(output);
+	});
 
 	schema.setInsert(function($) {
 
@@ -16,6 +46,7 @@ NEWSCHEMA('Collections', function(schema) {
 		model.id = UID();
 		model.dtcreated = new Date();
 		model.databases = [];
+		model.token = [GUID(30)];
 
 		var collections = PREF.collections || {};
 		collections[model.id] = model;
@@ -37,7 +68,8 @@ NEWSCHEMA('Collections', function(schema) {
 
 		var col = collections[$.id];
 
-		col.token = model.token;
+		col.name = model.name;
+		col.icon = model.icon;
 		col.dtupdated = new Date();
 
 		PREF.set('collections', collections);
@@ -67,7 +99,6 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 	schema.define('type', ['nosql', 'table', 'binary'])('nosql');
 	schema.define('name', 'Lower(30)', true);
 	schema.define('schema', String);
-	schema.define('replication', '[String]');
 
 	schema.setInsert(function($) {
 
@@ -98,7 +129,7 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 		}
 
 		var db = collections[$.id];
-		var database = db.databases.findItem('id', $.id);
+		var database = db.databases.findItem('id', $.dbid);
 		if (!database) {
 			$.invalid('error-databases-404');
 			return;
@@ -145,8 +176,8 @@ ROUTE('POST      /collections/{id}/                      *Collections --> @updat
 ROUTE('DELETE    /collections/{id}/                      *Collections --> @remove');
 
 ROUTE('POST      /collections/{id}/databases/            *Collections/Databases --> @insert');
-ROUTE('POST      /collections/{id}/databases/{name}/     *Collections/Databases --> @update');
-ROUTE('DELETE    /collections/{id}/databases/{name}/     *Collections/Databases --> @remove');
+ROUTE('POST      /collections/{id}/databases/{dbid}/     *Collections/Databases --> @update');
+ROUTE('DELETE    /collections/{id}/databases/{dbid}/     *Collections/Databases --> @remove');
 
 ROUTE('POST /collections/{id}/databases/{name}/query/', function() {
 	var self = this;
@@ -157,7 +188,8 @@ ROUTE('POST /collections/{id}/databases/{name}/query/', function() {
 		return;
 	}
 
-	var db = col.databases[self.params.name];
+	var id = DBCACHE[self.params.name] || '';
+	var db = col.databases[id];
 	if (!db) {
 		self.invalid('error-databases-404');
 		return;
@@ -203,10 +235,9 @@ ROUTE('POST /collections/{id}/databases/{name}/query/', function() {
 function reloadcollections() {
 
 	var collections = PREF.collections || EMPTYOBJECT;
-	var keys = Object.keys(collections);
+	DBCACHE = {};
 
-	for (var i = 0; i < keys.length; i++) {
-		var key = keys[i];
+	Object.keys(collections).wait(function(key, next) {
 		var col = collections[key];
 		var instance = COLLECTIONS[key];
 
@@ -221,42 +252,43 @@ function reloadcollections() {
 			instance.type = col.type;
 			instance.replication = col.replication;
 			instance.databases = {};
-
 			COLLECTIONS[key] = instance;
 		}
 
 		var stamp = GUID(10);
 
-		for (var i = 0; i < col.databases.length; i++) {
-			var item = col.databases[i];
-			var db = instance.databases[item.name];
+		col.databases.wait(function(item, next) {
+			DBCACHE[item.name] = item.id;
+			var db = instance.databases[item.id];
 			if (db) {
 				db.stamp = stamp;
 				if (item.type === 'table' && db.schema !== item.schema)
 					db.instance.cmd_alter(db.schema);
+				next();
 			} else {
 				var dir = item.type === 'binary' ? Path.join(DIRECTORY, col.id, item.id + '.fdb') : Path.join(DIRECTORY, col.id);
 				PATH.mkdir(dir);
-				db = instance.databases[item.name] = {};
+				db = instance.databases[item.id] = {};
 				db.stamp = stamp;
 				db.dir = dir;
 				db.instance = Main.init(item.type, item.id, dir, function() {
 					if (item.type === 'table' && item.schema)
 						db.instance.cmd_alter(item.schema);
+					next();
 				});
 			}
-		}
 
-		keys = Object.keys(instance.databases);
-		for (var i = 0; i < keys.length; i++) {
-			var key = keys[i];
-			var db = instance.databases[key];
-			if (db.stamp !== stamp) {
-				Main.kill(db.instance);
-				delete instance.databases[key];
+			var keys = Object.keys(instance.databases);
+			for (var i = 0; i < keys.length; i++) {
+				var key = keys[i];
+				var db = instance.databases[key];
+				if (db.stamp !== stamp) {
+					Main.kill(db.instance);
+					delete instance.databases[key];
+				}
 			}
-		}
-	}
+		}, next);
+	});
 }
 
 /*

@@ -2027,5 +2027,10 @@ TextReader.prototype.done = function() {
 	return self;
 };
 
-exports.JsonDB = JsonDB;
-exports.TableDB = TableDB;
+exports.JsonDB = function(name, directory) {
+	return new JsonDB(name, directory);
+};
+
+exports.TableDB = function(name, directory) {
+	return new TableDB(name, directory);
+};

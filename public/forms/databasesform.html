@@ -1,0 +1,34 @@
+<div data---="form__common.form__if:databasesform;width:600;icon:database;autofocus:true;reload:databasesform/reload;submit:databasesform/submit" class="hidden">
+	<div data-scope="databasesform">
+		<div class="padding">
+			<div data---="radiobutton__?.type__items:@(NoSQL)|nosql,@(Table)|table,@(Binary)|binary__'nosql'" class="m"></div>
+			<div data---="input__?.name__required:1;maxlength:30;type:lower__''" class="m">@(Name)</div>
+			<div data---="input__?.schema" class="m">@(Schema)</div>
+			<div style="max-width:120px">
+				<div data---="faiconsbutton__?.icon__null__''"></div>
+			</div>
+
+		</div>
+	</div>
+	<nav data---="validation__databasesform">
+		<button name="submit" disabled><i class="fa fa-check-circle green"></i>@(SAVE)</button>
+		<button name="cancel">@(Cancel)</button>
+	</nav>
+</div>
+
+<script>
+
+	PLUGIN('databasesform', function(exports) {
+		exports.reload = function(com) {
+			com.reconfigure({ title: GET('?.id') ? '@(Edit database)' : '@(Add database)' });
+		};
+
+		exports.submit = function() {
+			AJAX('POST /collections/{0}/databases/'.format(databases.id), GET('? @reset'), ASETTER('message/response', function(response) {
+				console.log(response);
+			}));
+		};
+
+	});
+
+</script>

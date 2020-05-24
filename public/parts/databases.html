@@ -1,0 +1,41 @@
+<div data-scope="databases">
+	<header>
+		<label>@(List of databases)</label>
+		<nav>
+			<button class="exec" data-exec="?/add"><i class="fa fa-plus-circle"></i>@(Add database)</button>
+		</nav>
+	</header>
+	<div data---="viewbox__common.page__parent:.ui-layout2-section;scrollbar:1;margin:45" class="invisible">
+
+		<div data-bind="?.databases__template">
+			<script type="text/html">
+				{{ foreach m in value }}
+				<figure>
+					<div>{{ m.type }}</div>
+					<div>{{ m.name }}</div>
+				</figure>
+				{{ end }}
+			</script>
+		</div>
+
+
+	</div>
+</div>
+<div data---="importer__common.form__if:databasesform;url:/forms/databasesform.html"></div>
+
+<script>
+
+	PLUGIN('databases', function(exports) {
+		exports.reload = function() {
+			exports.refresh();
+		};
+
+		exports.refresh = function() {
+		};
+
+		exports.add = function() {
+			SET('common.form', 'databasesform');
+		};
+	});
+
+</script>

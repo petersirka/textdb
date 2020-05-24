@@ -3,7 +3,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>TextDB administration</title>
+	<title>TextDB Management</title>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 	<meta http-equiv="X-UA-Compatible" content="IE=10" />
@@ -14,6 +14,11 @@
 </head>
 <body data---="exec">
 
+	<div data---="LAZY faicons"></div>
+	<div data---="LAZY loading"></div>
+	<div data---="LAZY approve"></div>
+	<div data---="LAZY message"></div>
+
 	<div data---="layout2__null__parent:window" class="invisible">
 		<div data-type="left" data-size="220,220,200,0" data-scrollbar="selector:main;margin:76">
 			<header>
@@ -21,46 +26,69 @@
 			</header>
 			<main>
 				<br />
-				<ul class="nav">
-					<li class="selected"><i class="fa fa-database"></i>Collections</li>
-					<li><i class="fa fa-chevron-right"></i>Unsorted</li>
+				<ul class="nav" data---="selected__common.page__selector:li">
+					<li class="exec" data-exec="common/page" data-if="dashboard"><i class="fa fa-dashboard"></i>@(Dashboard)</li>
 				</ul>
-
-				<div class="caption">Maintenance</div>
-				<ul class="nav">
-					<li><span>34</span><i class="fa fa-chevron-right"></i>Duplicates</li>
-					<li><i class="fa fa-chevron-right"></i>Broken links</li>
-					<li><i class="fa fa-chevron-right"></i>Tags</li>
-					<li><i class="fa fa-chevron-right"></i>Trash</li>
+				<div class="caption">Collections</div>
+				<ul class="nav" data-bind="!common.collections__template" data---="selected__databases.id__selector:li">
+					<script type="text/html">
+						{{ foreach m in value }}
+							<li class="exec" data-exec="common/open" data-if="{{ m.id }}"><i class="fa fa-database"></i>{{ m.name }}</li>
+						{{ end }}
+					</script>
 				</ul>
 
 			</main>
 			<footer>
-				<span class="selected"><i class="fa fa-navicon"></i></span>
+				<span class="exec" data-exec="common/add"><i class="fa fa-plus-circle green"></i></span>
 				<span><i class="fa fa-layer-group"></i></span>
 				<span><i class="fa fa-cloud-download"></i></span>
 				<span><i class="fa fa-cog"></i></span>
 			</footer>
 		</div>
 		<div data-type="main">
-			<header>
-				<label>All bookmarks</label>
-				<nav>
-					<button><i class="fa fa-plus-circle"></i>Add</button>
-					<button><i class="fa fa-cog"></i>Options</button>
-					<button class="exec" data-exec="toggledarkmode"><i class="fa fa-adjust"></i>Toggle dark-mode</button>
-				</nav>
-			</header>
-			<div class="padding">
-				App body
-			</div>
+			<div data---="part__common.page__if:databases;url:/parts/databases.html;reload:databases/reload"></div>
 		</div>
 	</div>
 
+	<div data---="importer__common.form__if:collectionsform;url:/forms/collectionsform.html"></div>
+
 	<script>
-		function toggledarkmode() {
-			$('body').tclass('ui-dark');
-		}
+
+		var common = { page: 'dashboard' };
+
+		PLUGIN('common', function(exports) {
+
+			exports.page = function(el) {
+				SET('common.page', el.attrd('if'));
+				NUL('databases');
+			};
+
+			exports.refresh = function() {
+				AJAX('GET /collections/', function(response) {
+					for (var i = 0; i < response.length; i++) {
+						var item = response[i];
+						for (var j = 0; j < item.token.length; j++)
+							item.token[j] = 'textdb' + location.protocol + '//' + location.hostname + (location.port ? (':' + location.port) : '') + '/collections/' + item.id + '/';
+					}
+					SET('?.collections', response);
+				});
+			};
+
+			exports.add = function() {
+				SET('collectionsform @default', {});
+				SET('common.form', 'collectionsform');
+			};
+
+			exports.open = function(el) {
+				var collection = common.collections.findItem('id', el.attrd('if'));
+				SET('databases', collection);
+				SET('common.page', 'databases');
+			};
+
+			exports.refresh();
+		});
+
 	</script>
 
 </body>

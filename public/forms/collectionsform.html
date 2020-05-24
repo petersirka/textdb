@@ -1,0 +1,24 @@
+<div data---="form__common.form__if:collectionsform;width:400;icon:database;autofocus:true;reload:collectionsform/reload" class="hidden">
+	<div data-scope="collectionsform">
+		<div class="padding">
+			<div data---="input__?.name__required:1;maxlength:50__''" class="m">@(Name)</div>
+			<div style="max-width:120px">
+				<div data---="faiconsbutton__?.icon__null__''"></div>
+			</div>
+		</div>
+	</div>
+	<nav data---="submit__collectionsform__create:POST /collections/;update:POST /collections/{id}/;done:collections/refresh;null:common.form;success:@(Collection has been saved successfully)">
+		<button name="submit" disabled><i class="fa fa-check-circle green"></i>@(SAVE)</button>
+		<button name="cancel">@(Cancel)</button>
+	</nav>
+</div>
+
+<script>
+
+	PLUGIN('collectionsform', function(exports) {
+		exports.reload = function(com) {
+			com.reconfigure({ title: GET('?.id') ? '@(Edit collection)' : '@(Add collection)' });
+		};
+	});
+
+</script>
