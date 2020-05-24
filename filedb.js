@@ -1,10 +1,10 @@
 require('total.js');
+
 const Path = require('path');
 const Fs = require('fs');
 const IMAGES = { jpg: 1, png: 1, gif: 1, svg: 1, jpeg: 1, heic: 1, heif: 1, webp: 1, tiff: 1, bmp: 1 };
 const HEADERSIZE = 300;
 const MKDIR = { recursive: true };
-const STREAMOPTIONS = { start: 0, end: HEADERSIZE - 1, encoding: 'binary' };
 
 function FileDB(name, directory) {
 	var t = this;
@@ -15,6 +15,11 @@ function FileDB(name, directory) {
 }
 
 const FP = FileDB.prototype;
+
+FP.service = function(counter) {
+	if (counter % 10)
+		this.cache = {};
+};
 
 FP.makedirectory = function(id) {
 
@@ -48,8 +53,10 @@ FP.save = function(id, name, filename, callback) {
 		Fs.mkdir(directory, MKDIR, function(err) {
 			if (err)
 				callback(err);
-			else
+			else {
+				self.cache[directory] = 1;
 				self.saveforce(id, name, filename, filenameto, callback);
+			}
 		});
 	}
 
@@ -209,22 +216,22 @@ FP.clear = function(callback) {
 	var count = 0;
 
 	Fs.readdir(self.directory, function(err, response) {
-
 		if (err)
 			return callback(err);
-
 		Fs.appendFile(self.logger, JSON.stringify({ type: 'clear', date: new Date() }) + '\n', NOOP);
-
 		response.wait(function(item, next) {
 			var dir = Path.join(self.directory, item);
 			Fs.readdir(dir, function(err, response) {
 				if (response instanceof Array) {
 					count += response.length;
-					response.wait((file, next) => Fs.unlink(Path.join(self.directory, item, file), next), () => Fs.unlink(dir, next));
+					response.wait((file, next) => Fs.unlink(Path.join(self.directory, item, file), next), () => Fs.rmdir(dir, next));
 				} else
 					next();
 			});
-		}, () => callback(null, count));
+		}, function() {
+			self.cache = {};
+			callback && callback(null, count);
+		});
 
 	});
 
@@ -274,7 +281,7 @@ function ext(name) {
 
 var fd = new FileDB('images', 'images.fdb');
 
-fd.clear();
+// fd.clear(console.log);
 
 // fd.save(UID(), 'logo.png', '/Users/petersirka/Desktop/logo.png', console.log);
 // fd.count(console.log);
