@@ -1,0 +1,66 @@
+/*auto*/
+
+.ui-layout2, .ui-layout2-section { position: absolute; }
+.ui-layout2-left { z-index: 2; }
+.ui-layout2-right { z-index: 2; }
+
+.ui-layout2-left { border-right: 1px solid #E0E0E0; background-color: #F5F5F5; }
+.ui-layout2-left .logo { float: left; margin: 0 0 0 15px; line-height: 44px; font-weight: bold; font-size: 16px; color: #777777; }
+.ui-layout2-left .logo img { height: 22px; }
+.ui-layout2-left .logo:hover { text-decoration: none; }
+.ui-layout2-left header { height: 45px; border-bottom: 1px solid #E0E0E0; }
+.ui-layout2-left footer { height: 33px; border-top: 1px solid #E0E0E0; text-align: center; white-space: nowrap; }
+.ui-layout2-left footer span { cursor: pointer; width: 25%; text-align: center; float: left; border-left: 1px solid #E0E0E0; line-height: 31px; color: #888888; }
+.ui-layout2-left footer span:hover { color: #000000; }
+.ui-layout2-left footer span:first-child { border-left: 0; }
+.ui-layout2-left footer .selected { color: #000000; }
+.ui-layout2-left .nav { list-style-type: none; margin: 0 0 15px; padding: 0; }
+.ui-layout2-left .nav li { margin: 0; padding: 4px 15px; display: block; color: #000000; cursor: pointer; margin-bottom: 3px; }
+.ui-layout2-left .nav li span { float: right; color: #888888; font-size: 12px; padding: 2px 0 0; }
+.ui-layout2-left .nav li:hover { background-color: #E8E8E8; }
+.ui-layout2-left .nav i { width: 18px; color: #A0A0A0; text-align: center; margin-right: 7px; }
+.ui-layout2-left .nav .selected { background-color: #4C84F7 !important; color: #FFFFFF; }
+.ui-layout2-left .nav .selected i { color: #FFFFFF; }
+.ui-layout2-left .nav .selected span { color: #FFFFFF; }
+.ui-layout2-left .caption { font-size: 12px; color: #888888; padding: 5px 15px; }
+.ui-layout2-main header { height: 45px; border-bottom: 1px solid #E0E0E0; }
+.ui-layout2-main header > nav { height: 44px; padding: 10px 15px 0 0; }
+.ui-layout2-main header label { float: left; line-height: 44px; font-weight: bold; margin-left: 15px; }
+.ui-layout2-main header label i { margin-right: 5px; }
+.ui-layout2-main .padding { padding: 15px; }
+
+header > nav { float: right; }
+header > nav button { outline: 0; background: linear-gradient(#FFFFFF,#F8F8F8); border: 1px solid #E0E0E0; border-left: 0; font-size: 11px; height: 24px; padding: 0 8px; margin: 0; color: #000000; min-width: 80px; text-align: center; vertical-align: top; background-color: #FFFFFF; float: left; }
+header > nav button i { margin-right: 5px; }
+header > nav button .fa-plus-circle, header button .fa-check-circle { color: #68B25B; }
+header > nav button:first-child { border-left: 1px solid #E0E0E0; border-top-left-radius: 2px; border-bottom-left-radius: 2px; }
+header > nav button:last-child { border-top-right-radius: 2px; border-bottom-right-radius: 2px; }
+header > nav button:hover { border-color: #D0D0D0; }
+header > nav button:active { background: #E9E9E9; }
+header > nav button:disabled { color: silver; cursor: not-allowed; border-color: #E0E0E0 !important; background: linear-gradient(#F8F8F8,#F0F0F0); }
+header > nav button:disabled i { color: silver !important; }
+
+.ui-dark .ui-layout2-left .logo { color: #777777; }
+.ui-dark .ui-layout2-main header label { color: #FFFFFF; }
+.ui-dark .ui-layout2-left { border-right-color: #333333; background-color: #181818; }
+.ui-dark .ui-layout2-left header { border-bottom-color: #333333; }
+.ui-dark .ui-layout2-left footer { border-top-color: #333333; }
+.ui-dark .ui-layout2-left footer span { border-left-color: #333333; color: #888888; }
+.ui-dark .ui-layout2-left footer span:hover { color: #FFFFFF; }
+.ui-dark .ui-layout2-left footer .selected { color: #FFFFFF; }
+.ui-dark .ui-layout2-left .nav li { color: #D0D0D0; }
+.ui-dark .ui-layout2-left .nav li span { color: #888888; }
+.ui-dark .ui-layout2-left .nav li:hover { background-color: #272727; }
+.ui-dark .ui-layout2-left .nav i { color: #A0A0A0; }
+.ui-dark .ui-layout2-left .nav .selected { background-color: #4C84F7 !important; color: #FFFFFF; }
+.ui-dark .ui-layout2-left .nav .selected i { color: #FFFFFF; }
+.ui-dark .ui-layout2-left .nav .selected span { color: #FFFFFF; }
+.ui-dark .ui-layout2-left .caption { color: #888888; }
+.ui-dark .ui-layout2-main { background-color: #222222; }
+.ui-dark .ui-layout2-main header { border-bottom-color: #333333; }
+
+.ui-dark header nav > button { background: linear-gradient(#323232,#353535); border-color: #404040; color: #FFFFFF; }
+.ui-dark header nav > button:hover { border-color: #505050; }
+.ui-dark header nav > button:active { background: #303030; }
+.ui-dark header nav > button:disabled { color: #505050; border-color: #353535 !important; background: linear-gradient(#202020,#252525); }
+.ui-dark header nav > button:disabled i { color: #505050 !important; }

@@ -1,13 +1,16 @@
-const DB = require('./textdb');
+
 var STATS = { TYPE: 'stats' };
 var instance;
 
 switch (process.argv[2]) {
 	case 'nosql':
-		instance = new DB.JsonDB(process.argv[3], process.argv[4]);
+		instance = new require('./textdb').JsonDB(process.argv[3], process.argv[4]);
 		break;
 	case 'table':
-		instance = new DB.TableDB(process.argv[3], process.argv[4]);
+		instance = new require('./textdb').TableDB(process.argv[3], process.argv[4]);
+		break;
+	case 'binary':
+		instance = new require('./filedb').FileDB(process.argv[3], process.argv[4]);
 		break;
 }
 
@@ -55,6 +58,20 @@ process.on('message', function(msg) {
 		case 'drop':
 			instance.drop();
 			setTimeout(() => process.kill(0), 5000);
+			break;
+
+		case 'filedb_save':
+			instance.save(msg.id, msg.builder.name, msg.builder.filename, function(err, meta) {
+				if (!meta)
+					meta = {};
+				meta.id = msg.id;
+				if (err)
+					meta.err = err + '';
+				meta.TYPE = 'response';
+				process.send(meta);
+			});
+			break;
+		case 'filedb_read':
 			break;
 	}
 });

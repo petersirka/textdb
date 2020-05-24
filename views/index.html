@@ -1,0 +1,67 @@
+@{layout('')}
+
+<!DOCTYPE html>
+<html>
+<head>
+	<title>TextDB administration</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+	<meta http-equiv="X-UA-Compatible" content="IE=10" />
+	<meta name="robots" content="all,follow" />
+	<link href="https://cdn.componentator.com/spa.min@18.css" rel="stylesheet" type="text/css" />
+	<script src="https://cdn.componentator.com/spa.min@18.js"></script>
+	@{import('default.js + ui.js', 'default.css + ui.css')}
+</head>
+<body data---="exec">
+
+	<div data---="layout2__null__parent:window" class="invisible">
+		<div data-type="left" data-size="220,220,200,0" data-scrollbar="selector:main;margin:76">
+			<header>
+				<a href="/" class="logo">Your Logo Here</a>
+			</header>
+			<main>
+				<br />
+				<ul class="nav">
+					<li class="selected"><i class="fa fa-database"></i>Collections</li>
+					<li><i class="fa fa-chevron-right"></i>Unsorted</li>
+				</ul>
+
+				<div class="caption">Maintenance</div>
+				<ul class="nav">
+					<li><span>34</span><i class="fa fa-chevron-right"></i>Duplicates</li>
+					<li><i class="fa fa-chevron-right"></i>Broken links</li>
+					<li><i class="fa fa-chevron-right"></i>Tags</li>
+					<li><i class="fa fa-chevron-right"></i>Trash</li>
+				</ul>
+
+			</main>
+			<footer>
+				<span class="selected"><i class="fa fa-navicon"></i></span>
+				<span><i class="fa fa-layer-group"></i></span>
+				<span><i class="fa fa-cloud-download"></i></span>
+				<span><i class="fa fa-cog"></i></span>
+			</footer>
+		</div>
+		<div data-type="main">
+			<header>
+				<label>All bookmarks</label>
+				<nav>
+					<button><i class="fa fa-plus-circle"></i>Add</button>
+					<button><i class="fa fa-cog"></i>Options</button>
+					<button class="exec" data-exec="toggledarkmode"><i class="fa fa-adjust"></i>Toggle dark-mode</button>
+				</nav>
+			</header>
+			<div class="padding">
+				App body
+			</div>
+		</div>
+	</div>
+
+	<script>
+		function toggledarkmode() {
+			$('body').tclass('ui-dark');
+		}
+	</script>
+
+</body>
+</html>

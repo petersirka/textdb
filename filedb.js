@@ -1,5 +1,3 @@
-require('total.js');
-
 const Path = require('path');
 const Fs = require('fs');
 const IMAGES = { jpg: 1, png: 1, gif: 1, svg: 1, jpeg: 1, heic: 1, heif: 1, webp: 1, tiff: 1, bmp: 1 };
@@ -10,7 +8,7 @@ function FileDB(name, directory) {
 	var t = this;
 	t.name = name;
 	t.directory = directory;
-	t.logger = directory + '/' + name + '.log';
+	t.logger = directory + '/db.log';
 	t.cache = {};
 }
 
@@ -278,6 +276,8 @@ function ext(name) {
 	var index = name.lastIndexOf('.');
 	return index === -1 ? '' : name.substring(index + 1).toLowerCase();
 }
+
+exports.FileDB = FileDB;
 
 // var fd = new FileDB('images', 'images.fdb');
 // fd.clear(console.log);

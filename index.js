@@ -138,6 +138,7 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 	});
 });
 
+ROUTE('GET       /');
 ROUTE('GET       /collections/                           *Collections --> @query');
 ROUTE('POST      /collections/                           *Collections --> @insert');
 ROUTE('POST      /collections/{id}/                      *Collections --> @update');
@@ -220,6 +221,7 @@ function reloadcollections() {
 			instance.type = col.type;
 			instance.replication = col.replication;
 			instance.databases = {};
+
 			COLLECTIONS[key] = instance;
 		}
 
@@ -233,12 +235,12 @@ function reloadcollections() {
 				if (item.type === 'table' && db.schema !== item.schema)
 					db.instance.cmd_alter(db.schema);
 			} else {
-				var dir = Path.join(DIRECTORY, col.name);
+				var dir = item.type === 'binary' ? Path.join(DIRECTORY, col.id, item.id + '.fdb') : Path.join(DIRECTORY, col.id);
 				PATH.mkdir(dir);
 				db = instance.databases[item.name] = {};
 				db.stamp = stamp;
 				db.dir = dir;
-				db.instance = Main.init(item.type, item.name, dir, function() {
+				db.instance = Main.init(item.type, item.id, dir, function() {
 					if (item.type === 'table' && item.schema)
 						db.instance.cmd_alter(item.schema);
 				});
@@ -309,4 +311,4 @@ var instance = Main.init('nosql', 'skuska', '', function() {
 */
 
 ON('ready', reloadcollections);
-F.http('release');
+F.http('debug');
