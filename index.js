@@ -22,8 +22,9 @@ NEWSCHEMA('Collections', function(schema) {
 			obj.id = item.id;
 			obj.icon = item.icon;
 			obj.name = item.name;
-			obj.token = item.token;
+			obj.tokens = item.tokens;
 			obj.databases = [];
+			var ref = COLLECTIONS[item.id];
 			for (var j = 0; j < item.databases.length; j++) {
 				var item2 = item.databases[j];
 				var obj2 = {};
@@ -31,6 +32,10 @@ NEWSCHEMA('Collections', function(schema) {
 				obj2.id = item2.id;
 				obj2.icon = item2.icon;
 				obj2.name = item2.name;
+
+				if (ref && ref.databases[obj2.id])
+					obj2.stats = ref.databases[obj2.id].instance.stats;
+
 				obj.databases.push(obj2);
 			}
 
@@ -46,7 +51,7 @@ NEWSCHEMA('Collections', function(schema) {
 		model.id = UID();
 		model.dtcreated = new Date();
 		model.databases = [];
-		model.token = [GUID(30)];
+		model.tokens = [GUID(30)];
 
 		var collections = PREF.collections || {};
 		collections[model.id] = model;
@@ -136,8 +141,7 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 		}
 
 		database.dtupdated = new Date();
-		database.replication = model.replication;
-		database.token = model.token;
+		database.tokens = model.tokens;
 		database.schema = model.schema;
 		PREF.set('collections', collections);
 		$.success(model.id);
@@ -179,17 +183,16 @@ ROUTE('POST      /collections/{id}/databases/            *Collections/Databases 
 ROUTE('POST      /collections/{id}/databases/{dbid}/     *Collections/Databases --> @update');
 ROUTE('DELETE    /collections/{id}/databases/{dbid}/     *Collections/Databases --> @remove');
 
-ROUTE('POST /collections/{id}/databases/{name}/query/', function() {
+ROUTE('POST /collections/{token}/databases/{name}/query/', function() {
 	var self = this;
 
-	var col = COLLECTIONS[self.id];
+	var col = COLLECTIONS[DBCACHE[self.id] || ''];
 	if (!col) {
 		self.invalid('error-collections-404');
 		return;
 	}
 
-	var id = DBCACHE[self.params.name] || '';
-	var db = col.databases[id];
+	var db = col.databases[DBCACHE[self.params.name] || ''];
 	if (!db) {
 		self.invalid('error-databases-404');
 		return;
@@ -250,10 +253,12 @@ function reloadcollections() {
 			instance.name = col.name;
 			instance.schema = col.schema;
 			instance.type = col.type;
-			instance.replication = col.replication;
 			instance.databases = {};
 			COLLECTIONS[key] = instance;
 		}
+
+		for (var i = 0; i < col.tokens.length; i++)
+			DBCACHE[col.tokens[i]] = col.id;
 
 		var stamp = GUID(10);
 

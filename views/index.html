@@ -68,8 +68,8 @@
 				AJAX('GET /collections/', function(response) {
 					for (var i = 0; i < response.length; i++) {
 						var item = response[i];
-						for (var j = 0; j < item.token.length; j++)
-							item.token[j] = 'textdb' + location.protocol + '//' + location.hostname + (location.port ? (':' + location.port) : '') + '/collections/' + item.id + '/';
+						for (var j = 0; j < item.tokens.length; j++)
+							item.tokens[j] = 'textdb' + location.protocol + '//' + location.hostname + (location.port ? (':' + location.port) : '') + '/collections/' + item.tokens[j] + '/';
 					}
 					SET('?.collections', response);
 				});

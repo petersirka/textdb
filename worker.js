@@ -1,8 +1,11 @@
+const Fs = require('fs');
 
 var STATS = { TYPE: 'stats' };
+var counter = 0;
 var instance;
+var TYPE = process.argv[2];
 
-switch (process.argv[2]) {
+switch (TYPE) {
 	case 'nosql':
 		instance = require('./textdb').JsonDB(process.argv[3], process.argv[4]);
 		break;
@@ -76,11 +79,24 @@ process.on('message', function(msg) {
 	}
 });
 
+function statresponse(err, stat) {
+	if (stat)
+		STATS.size = stat.size;
+}
+
 function measure() {
+
+	if (counter++ > 100000000)
+		counter = 0;
+
 	STATS.pendingread = instance.pending_reader.length + instance.pending_reader2.length + instance.pending_streamer.length;
 	STATS.pendingwrite = instance.pending_update.length + instance.pending_append.length + instance.pending_remove.length;
 	STATS.memory = (process.memoryUsage().heapUsed / 1024 / 1024).floor(2);
 	STATS.duration = instance.duration;
+
+	if (counter === 1 || counter % 120 && TYPE !== 'binary')
+		Fs.stat(instance.filename, statresponse);
+
 	process.send(STATS);
 }
 
