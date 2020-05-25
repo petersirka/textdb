@@ -76,10 +76,10 @@ function TableDB(name, directory) {
 		t.next(0);
 	};
 
-	Fs.createReadStream(t.filename, { end: 1200 }).once('data', function(chunk) {
-		t.parseSchema(chunk.toString('utf8').split('\n', 1)[0].split(DELIMITER));
+	Fs.createReadStream(t.filename, { end: 2048 }).once('data', function(chunk) {
+		t.parseSchema(t, chunk.toString('utf8').split('\n', 1)[0].split(DELIMITER));
 		t.ready = true;
-		t.$header = Buffer.byteLength(t.stringifySchema()) + 1;
+		t.$header = Buffer.byteLength(t.stringifySchema(t)) + 1;
 		t.next(0);
 	}).on('error', function() {
 		// NOOP
@@ -126,32 +126,26 @@ TD.memory = JD.memory = function(count, size) {
 	return self;
 };
 
+function prepareschema(schema) {
+	return schema.replace(/;|,/g, DELIMITER).trim();
+}
+
 TD.alter = function(schema, callback) {
 
 	var self = this;
+	var parsed = {};
 
 	if (self.$header) {
-
-		if (schema) {
-			self.parseSchema(schema.replace(/;|,/g, DELIMITER).trim().split(DELIMITER));
-			schema = self.stringifySchema();
-		}
-
 		self.ready = true;
-
-		if (schema && self.stringifySchema() !== schema) {
-			self.$header = Buffer.byteLength(self.stringifySchema()) + 1;
+		self.parseSchema(parsed, prepareschema(schema).split(DELIMITER));
+		if (self.stringifySchema(self) !== self.stringifySchema(parsed))
 			self.extend(schema, callback);
-		} else {
-			self.$header = Buffer.byteLength(schema) + 1;
+		else
 			callback && callback();
-		}
-
 		self.next(0);
-
 	} else {
-		self.parseSchema(schema.replace(/;|,/g, DELIMITER).trim().split(DELIMITER));
-		var bschema = self.stringifySchema();
+		self.parseSchema(self, prepareschema(schema).split(DELIMITER));
+		var bschema = self.stringifySchema(self);
 		self.$header = Buffer.byteLength(bschema) + 1;
 		Fs.writeFileSync(self.filename, bschema + NEWLINE, 'utf8');
 		self.ready = true;
@@ -930,13 +924,15 @@ TD.extend = function(schema, callback) {
 		var olds = self.$schema;
 		var oldk = self.$keys;
 		var oldl = self.$size;
-		var oldh = Buffer.byteLength(self.stringifySchema() + NEWLINE);
+		var oldh = Buffer.byteLength(self.stringifySchema(self) + NEWLINE);
 
-		self.parseSchema(schema.replace(/;|,/g, DELIMITER).trim().split(DELIMITER));
 
-		var meta = self.stringifySchema() + NEWLINE;
+		self.parseSchema(self, prepareschema(schema).split(DELIMITER));
+
+		var meta = self.stringifySchema(self) + NEWLINE;
 		var news = self.$schema;
 		var newk = self.$keys;
+
 		self.$schema = olds;
 		self.$keys = oldk;
 
@@ -964,6 +960,14 @@ TD.extend = function(schema, callback) {
 		fs.start = oldh;
 		fs.divider = '\n';
 
+		var copy = [];
+
+		for (var i = 0; i < newk.length; i++) {
+			var key = newk[i];
+			if (news[key].copy)
+				copy.push(news[key]);
+		}
+
 		if (oldl)
 			self.linesize = oldl;
 
@@ -981,7 +985,14 @@ TD.extend = function(schema, callback) {
 			for (var a = 0; a < lines.length; a++) {
 				data.line = lines[a].split(DELIMITER);
 				data.index = count++;
+
 				var doc = self.parseData(data);
+
+				if (copy.length) {
+					for (var i = 0; i < copy.length; i++)
+						doc[copy[i].name] = doc[copy[i].copy];
+				}
+
 				items.push(doc);
 			}
 
@@ -1429,7 +1440,7 @@ TD.$clean = function() {
 	var fs = new TextStreamReader(self.filename);
 	var writer = Fs.createWriteStream(self.filename + '-tmp');
 
-	writer.write(self.stringifySchema() + NEWLINE);
+	writer.write(self.stringifySchema(self) + NEWLINE);
 
 	fs.start = self.$header;
 	fs.linesize = self.$size;
@@ -1476,7 +1487,7 @@ TD.$clear = function() {
 		for (var i = 0; i < filter.length; i++)
 			filter[i]();
 
-		Fs.appendFile(self.filename, self.stringifySchema() + NEWLINE, function() {
+		Fs.appendFile(self.filename, self.stringifySchema(self) + NEWLINE, function() {
 			self.next(0);
 		});
 	});
@@ -1558,20 +1569,25 @@ TD.allocations = function(enable) {
 	return this;
 };
 
-TD.parseSchema = function() {
-	var self = this;
-	var arr = arguments[0] instanceof Array ? arguments[0] : arguments;
+TD.parseSchema = function(output, arr) {
+
 	var sized = true;
 
-	self.$schema = {};
-	self.$keys = [];
-	self.$size = 2;
+	output.$schema = {};
+	output.$keys = [];
+	output.$size = 2;
 
 	for (var i = 0; i < arr.length; i++) {
 		var arg = arr[i].split(':');
 		var type = 0;
 		var T = (arg[1] || '').toLowerCase().trim();
 		var size = 0;
+		var copy = arg[0].match(/=.*$/g);
+
+		if (copy) {
+			arg[0] = arg[0].replace(copy, '').trim();
+			copy = (copy + '').replace(/=/g, '').trim();
+		}
 
 		var index = T.indexOf('(');
 		if (index != -1) {
@@ -1606,29 +1622,31 @@ TD.parseSchema = function() {
 				break;
 		}
 		var name = arg[0].trim();
-		self.$schema[name] = { type: type, pos: i, size: size };
-		self.$keys.push(name);
-		self.$size += size + 1;
+		output.$schema[name] = { name: name, type: type, pos: i, size: size, copy: copy };
+		output.$keys.push(name);
+		output.$size += size + 1;
 	}
 
 	if (sized) {
-		self.$allocations = false;
-		self.$size++; // newline
+		output.$allocations = false;
+		output.$size++; // newline
 	} else
-		self.$size = 0;
+		output.$size = 0;
 
-	return self;
+	return this;
 };
 
-TD.stringifySchema = function() {
+TD.stringifySchema = function(schema) {
 
-	var self = this;
 	var data = [];
 
-	for (var i = 0; i < self.$keys.length; i++) {
+	if (schema.$keys === undefined)
+		throw new Error('FET');
 
-		var key = self.$keys[i];
-		var meta = self.$schema[key];
+	for (var i = 0; i < schema.$keys.length; i++) {
+
+		var key = schema.$keys[i];
+		var meta = schema.$schema[key];
 		var type = 'string';
 
 		switch (meta.type) {
@@ -1637,7 +1655,7 @@ TD.stringifySchema = function() {
 				type = 'number';
 
 				// string
-				if (self.$size && meta.size !== 16)
+				if (schema.$size && meta.size !== 16)
 					type += '(' + (meta.size) + ')';
 
 				break;
