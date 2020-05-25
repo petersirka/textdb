@@ -186,56 +186,87 @@ ROUTE('POST      /collections/{id}/databases/            *Collections/Databases 
 ROUTE('POST      /collections/{id}/databases/{dbid}/     *Collections/Databases --> @update');
 ROUTE('DELETE    /collections/{id}/databases/{dbid}/     *Collections/Databases --> @remove');
 
-ROUTE('POST /collections/{token}/databases/{name}/query/', function() {
+WEBSOCKET('/', function() {
+
 	var self = this;
 
-	var col = COLLECTIONS[DBCACHE[self.id] || ''];
-	if (!col) {
-		self.invalid('error-collections-404');
-		return;
-	}
+	self.autodestroy();
 
-	var db = col.databases[DBCACHE[self.params.name] || ''];
-	if (!db) {
-		self.invalid('error-databases-404');
-		return;
-	}
+	self.on('open', function(client) {
+		var col = COLLECTIONS[DBCACHE[client.query.token] || ''];
+		if (!col)
+			client.close(4004);
+	});
 
-	// self.body.command = '';
-	// self.body.builder = {};
-	var instance = db.instance;
-	switch (self.body.command) {
+	self.on('message', function(client, message) {
+
+		var callback = function(response, err) {
+			client && client.send({ id: message.id, err: err, response: response });
+		};
+
+		var col = COLLECTIONS[DBCACHE[client.query.token] || ''];
+		if (!col) {
+			callback(null, 'Token is invalid');
+			client.close(4004);
+			return;
+		}
+
+		var db = col.databases[DBCACHE[message.db] || ''];
+		if (db)
+			query(db.instance, message, callback);
+		else
+			callback(null, 'Database "{0}" not found'.format(message.db));
+
+	});
+
+}, ['json']);
+
+function query(instance, message, callback) {
+	switch (message.command) {
 		case 'find':
-			instance.cmd_find(self.body.builder, self.callback());
+			instance.cmd_find(message.builder, callback);
 			break;
 		case 'find2':
-			instance.cmd_find2(self.body.builder, self.callback());
+			instance.cmd_find2(message.builder, callback);
 			break;
 		case 'insert':
-			instance.cmd_insert(self.body.builder, self.callback());
+			instance.cmd_insert(message.builder, callback);
 			break;
 		case 'update':
-			instance.cmd_update(self.body.builder, self.callback());
+			instance.cmd_update(message.builder, callback);
 			break;
 		case 'remove':
-			instance.cmd_remove(self.body.builder, self.callback());
+			instance.cmd_remove(message.builder, callback);
 			break;
 		case 'clear':
-			instance.cmd_clear(self.done(true));
+			instance.cmd_clear(callback);
 			break;
 		case 'clean':
-			instance.cmd_clean(self.done(true));
+			instance.cmd_clean(callback);
 			break;
 		case 'alter':
-			instance.cmd_alter(self.body.schema, self.done(true));
+			instance.cmd_alter(message.schema, callback);
 			break;
 		case 'stats':
-			self.json(instance.stats);
+			callback(instance.stats);
 			break;
 		default:
-			self.invalid('error-command');
+			callback(null, 'Command not found');
 			break;
 	}
+}
+
+ROUTE('POST /collections/{token}/databases/{name}/query/', function() {
+	var self = this;
+	var col = COLLECTIONS[DBCACHE[self.id] || ''];
+	if (col) {
+		var db = col.databases[DBCACHE[self.params.name] || ''];
+		if (db)
+			query(db.instance, self.body, self.callback());
+		else
+			self.invalid('error-databases-404');
+	} else
+		self.invalid('error-collections-404');
 });
 
 function reloadcollections() {
