@@ -160,6 +160,7 @@ QueryBuilder.prototype.sort = function(field) {
 
 	if (!tmp) {
 		var index = field.lastIndexOf('_');
+		var tmp = {};
 		tmp.name = field.substring(0, index);
 		tmp.asc = field.substring(index + 1) === 'asc';
 		SORTCACHE[field] = tmp;

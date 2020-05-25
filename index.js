@@ -104,6 +104,7 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 	schema.define('type', ['nosql', 'table', 'binary'])('nosql');
 	schema.define('name', 'Lower(30)', true);
 	schema.define('schema', String);
+	schema.define('allocations', Boolean);
 
 	schema.setInsert(function($) {
 
@@ -143,6 +144,8 @@ NEWSCHEMA('Collections/Databases', function(schema) {
 		database.dtupdated = new Date();
 		database.tokens = model.tokens;
 		database.schema = model.schema;
+		database.allocations = model.allocations;
+
 		PREF.set('collections', collections);
 		$.success(model.id);
 		reloadcollections();
